@@ -918,6 +918,11 @@ dialog p {
   text-align: left;
   color: var(--t2);
 }
+.settings-nav .settings-planned {
+  margin-left: auto;
+  font-size: 11.5px;
+  color: var(--t3);
+}
 .settings-nav button[aria-current="page"] {
   background: var(--sel);
   color: var(--t1);

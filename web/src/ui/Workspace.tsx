@@ -511,6 +511,48 @@ export function Workspace({
   const prefs = usePreferences();
   const menuRef = useRef<HTMLButtonElement>(null);
   const settingsReturnFocus = useRef<HTMLElement | null>(null);
+  const settingsJournalFocus = useRef<{
+    store: NotesStore;
+    sourceOwner: NotesLibraryStore | undefined;
+    accountId: string;
+    deviceId: string;
+  } | null>(null);
+  const journalNavigationRef = useRef<HTMLButtonElement | null>(null);
+  useLayoutEffect(
+    () => () => {
+      settingsJournalFocus.current = null;
+    },
+    [store, sourceOwner, session.accountId, session.deviceId],
+  );
+  // Dialog restores its captured opener during passive cleanup. Supply an
+  // immediate fallback, while preserving focus assigned by the Journal owner.
+  useEffect(() => {
+    const pending = settingsJournalFocus.current;
+    if (!pending || settings) return;
+    settingsJournalFocus.current = null;
+    if (
+      module !== "journal" ||
+      pending.store !== store ||
+      pending.sourceOwner !== sourceOwner ||
+      pending.accountId !== session.accountId ||
+      pending.deviceId !== session.deviceId
+    )
+      return;
+    if (document.activeElement?.closest(".journal-view")) return;
+    if (wide && !(desktop && sidebarHidden))
+      journalNavigationRef.current?.focus();
+    else (desktop?.navigationRef.current ?? menuRef.current)?.focus();
+  }, [
+    settings,
+    module,
+    store,
+    sourceOwner,
+    session.accountId,
+    session.deviceId,
+    wide,
+    desktop,
+    sidebarHidden,
+  ]);
   const drawerRef = useRef<HTMLElement>(null);
   const selectionRootRef = sidebarSelection.rootRef;
   const sidebarRootRef = useMemo(
@@ -1818,7 +1860,10 @@ export function Workspace({
             <span>{notes.filter((n) => !n.trashedAt).length}</span>
           </button>
           <button
-            ref={sidebarSelection.rowRef("journal")}
+            ref={(node) => {
+              journalNavigationRef.current = node;
+              return sidebarSelection.rowRef("journal")(node);
+            }}
             className={module === "journal" ? "nav active" : "nav"}
             onClick={() => {
               if (!canNavigate()) return;
@@ -2884,6 +2929,19 @@ export function Workspace({
             }}
             onExport={() => requestExport(notes, true)}
             onErase={() => setErase(true)}
+            onOpenJournal={() => {
+              if (!canNavigate()) return;
+              settingsJournalFocus.current = {
+                store,
+                sourceOwner,
+                accountId: session.accountId,
+                deviceId: session.deviceId,
+              };
+              setSettings(false);
+              setModule("journal");
+              setSelected(null);
+              setDrawer(false);
+            }}
             onDone={() => setSettings(false)}
             onSetup={() => openSetup("manual")}
             setupUnavailable={incomingNoteIntentActive}

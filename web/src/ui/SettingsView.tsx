@@ -1,5 +1,13 @@
 import { useRef, useState } from "react";
-import { Download, Layers, Settings, Type } from "lucide-react";
+import {
+  Download,
+  Layers,
+  Settings,
+  Type,
+  RefreshCw,
+  Sun,
+  Plug,
+} from "lucide-react";
 import { StudySettingsPanel } from "./StudySettingsPanel";
 import type {
   StudySettingsOwner,
@@ -14,6 +22,7 @@ export function SettingsView({
   onSignOut,
   onExport,
   onErase,
+  onOpenJournal,
   onDone,
   onSetup,
   setupUnavailable = false,
@@ -29,10 +38,11 @@ export function SettingsView({
   onSignOut: () => void;
   onExport: () => void;
   onErase: () => void;
+  onOpenJournal?: () => void;
   onDone: () => void;
 }) {
   const [section, setSection] = useState<
-    "general" | "editor" | "study" | "data"
+    "general" | "editor" | "sync" | "study" | "journal" | "apps" | "data"
   >("general");
   const editor = useEditorPreferences();
   const studyGuard = useRef<SettingsLeaveGuard | null>(null);
@@ -47,34 +57,32 @@ export function SettingsView({
   return (
     <div className="settings-layout">
       <nav className="settings-nav" aria-label="Settings sections">
-        <button
-          aria-current={section === "general" ? "page" : undefined}
-          onClick={() => leave(() => setSection("general"))}
-        >
-          <Settings size={15} />
-          General
-        </button>
-        <button
-          aria-current={section === "editor" ? "page" : undefined}
-          onClick={() => leave(() => setSection("editor"))}
-        >
-          <Type size={15} />
-          Editor
-        </button>
-        <button
-          aria-current={section === "study" ? "page" : undefined}
-          onClick={() => leave(() => setSection("study"))}
-        >
-          <Layers size={15} />
-          Study
-        </button>
-        <button
-          aria-current={section === "data" ? "page" : undefined}
-          onClick={() => leave(() => setSection("data"))}
-        >
-          <Download size={15} />
-          Data and export
-        </button>
+        {(
+          [
+            ["general", "General", Settings, false],
+            ["editor", "Editor", Type, false],
+            ["sync", "Sync", RefreshCw, true],
+            ["study", "Study", Layers, false],
+            ["journal", "Journal", Sun, false],
+            ["apps", "Connected apps", Plug, true],
+            ["data", "Data and export", Download, false],
+          ] as const
+        ).map(([id, label, Icon, planned]) => (
+          <button
+            key={id}
+            aria-current={section === id ? "page" : undefined}
+            onClick={() => leave(() => setSection(id))}
+          >
+            <Icon size={15} aria-hidden="true" />
+            <span>{label}</span>
+            {planned && (
+              <>
+                {" "}
+                <small className="settings-planned">Planned</small>
+              </>
+            )}
+          </button>
+        ))}
       </nav>
       <div
         className={
@@ -85,13 +93,17 @@ export function SettingsView({
       >
         <header className="settings-heading">
           <h3>
-            {section === "general"
-              ? "General"
-              : section === "editor"
-                ? "Editor"
-                : section === "study"
-                  ? "Study"
-                  : "Data and export"}
+            {
+              {
+                general: "General",
+                editor: "Editor",
+                sync: "Sync",
+                study: "Study",
+                journal: "Journal",
+                apps: "Connected apps",
+                data: "Data and export",
+              }[section]
+            }
           </h3>
           <button onClick={() => leave(onDone)}>Done</button>
         </header>
@@ -104,6 +116,10 @@ export function SettingsView({
                   <small>{email}</small>
                 </div>
                 <button onClick={onSignOut}>Sign out</button>
+              </div>
+              <div className="settings-row">
+                <b>Plan</b>
+                <span>Planned</span>
               </div>
               {onSetup && (
                 <div className="settings-row">
@@ -163,6 +179,21 @@ export function SettingsView({
                     </button>
                   ))}
                 </div>
+              </div>
+              <div className="settings-row">
+                <b>Language</b>
+                <div>
+                  <span>English</span>
+                  <small>More languages · Planned</small>
+                </div>
+              </div>
+              <div className="settings-row">
+                <b>Open at login</b>
+                <span>Planned</span>
+              </div>
+              <div className="settings-row">
+                <b>Week starts on</b>
+                <span>Planned</span>
               </div>
             </>
           ) : section === "editor" ? (
@@ -251,6 +282,47 @@ export function SettingsView({
                 <span>Orbyn Planner · Planned</span>
               </div>
             </>
+          ) : section === "sync" || section === "apps" ? (
+            <div className="settings-row">
+              <div>
+                <b>Planned</b>
+                <small>
+                  {section === "sync"
+                    ? "Notes stay on this device in this beta."
+                    : "Connections to other apps and browser extensions aren’t available in this beta."}
+                </small>
+              </div>
+            </div>
+          ) : section === "journal" ? (
+            <>
+              <div className="settings-row">
+                <b>Lock Journal with</b>
+                <span>A separate passphrase</span>
+              </div>
+              <div className="settings-row">
+                <b>Lock after</b>
+                <span>1 minute away</span>
+              </div>
+              <div className="settings-row">
+                <b>Evening reminder</b>
+                <span>Planned</span>
+              </div>
+              <div className="settings-row">
+                <div>
+                  <b>Prompts and habits</b>
+                  <small>Open Journal to manage prompts and habits.</small>
+                  <small>
+                    In Journal, choose Journal settings from its menu.
+                  </small>
+                </div>
+                <button
+                  disabled={!onOpenJournal}
+                  onClick={() => onOpenJournal && leave(onOpenJournal)}
+                >
+                  Open Journal
+                </button>
+              </div>
+            </>
           ) : section === "study" ? (
             <StudySettingsPanel
               owner={studyOwner}
@@ -267,6 +339,20 @@ export function SettingsView({
                   </small>
                 </div>
                 <button onClick={onExport}>Export all notes</button>
+              </div>
+              <div className="settings-row">
+                <div>
+                  <b>Export Journal</b>
+                  <small>
+                    Open Journal, then choose Export Journal from its menu.
+                  </small>
+                </div>
+                <button
+                  disabled={!onOpenJournal}
+                  onClick={() => onOpenJournal && leave(onOpenJournal)}
+                >
+                  Open Journal to export
+                </button>
               </div>
               <div className="settings-row">
                 <div>
