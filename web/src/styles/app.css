@@ -894,29 +894,33 @@ dialog p {
   clip-path: inset(50%);
 }
 .settings-layout {
+  font-size: 13px;
+  line-height: 1.45;
   display: grid;
   grid-template-columns: 210px minmax(0, 1fr);
   min-height: min(500px, calc(100dvh - 34px));
 }
 .settings-nav {
-  padding: 22px 12px;
+  padding: 6px 10px 10px;
   background: var(--bg);
   border-right: 1px solid var(--line);
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
 }
 .settings-nav button {
   justify-content: flex-start;
-  min-height: 32px;
+  min-height: 29px;
   padding: 0 8px;
   border-radius: 8px;
   gap: 10px;
   background: transparent;
   text-align: left;
+  color: var(--t2);
 }
 .settings-nav button[aria-current="page"] {
   background: var(--sel);
+  color: var(--t1);
 }
 .settings-pane {
   min-width: 0;
@@ -931,14 +935,16 @@ dialog p {
 }
 .settings-heading h3 {
   margin: 0;
-  font-size: 18px;
+  font-size: 22px;
+  font-weight: 500;
+  letter-spacing: -0.015em;
 }
 .settings-content {
-  padding: 6px 28px 24px;
+  padding: 8px 28px 24px;
   max-width: 760px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 0;
 }
 .settings-row {
   min-height: 52px;
@@ -949,32 +955,88 @@ dialog p {
   justify-content: space-between;
   gap: 16px;
 }
-.settings-row > div:first-child {
+.settings-row:last-child {
+  border-bottom: 1px solid var(--line);
+}
+.settings-row > :first-child {
   min-width: 0;
+  overflow-wrap: anywhere;
+}
+.settings-row > div:first-child,
+.settings-toggle > span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.settings-row > button {
+  flex-shrink: 0;
 }
 .settings-row b {
-  font-weight: 500;
+  font-weight: 400;
+  color: var(--t1);
 }
 .settings-row small {
   display: block;
+  font-size: 12px;
   color: var(--t3);
   overflow-wrap: anywhere;
 }
 .settings-segments {
   display: flex;
   flex-wrap: wrap;
-  padding: 3px;
+  padding: 2px;
+  gap: 2px;
+  flex-shrink: 0;
+  max-width: 100%;
   border-radius: 9px;
   background: var(--raise);
 }
 .settings-segments button {
   background: transparent;
-  padding: 4px 9px;
-  min-height: 28px;
+  padding: 0 10px;
+  min-height: 24px;
+  height: 24px;
+  font-size: 12px;
+  border-radius: 7px;
+  color: var(--t3);
 }
 .settings-segments button[aria-pressed="true"] {
   background: var(--main);
-  box-shadow: 0 1px 3px #0002;
+  color: var(--t1);
+  box-shadow: 0 0 0 1px var(--line);
+}
+/* Native inputs retain keyboard, focus and disabled semantics. */
+.settings-row input[type="checkbox"] {
+  appearance: none;
+  position: relative;
+  width: 30px;
+  height: 18px;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  border-radius: 999px;
+  background: var(--line2);
+  cursor: pointer;
+}
+.settings-row input[type="checkbox"]::after {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--main);
+}
+.settings-row input[type="checkbox"]:checked {
+  background: var(--t1);
+}
+.settings-row input[type="checkbox"]:checked::after {
+  left: 14px;
+}
+.settings-row input[type="checkbox"]:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
 @media (max-width: 899px) {
   .settings-layout {
@@ -995,7 +1057,7 @@ dialog p {
     padding: 18px 20px 6px;
   }
   .settings-content {
-    padding: 6px 20px 24px;
+    padding: 8px 20px 24px;
   }
 }
 
