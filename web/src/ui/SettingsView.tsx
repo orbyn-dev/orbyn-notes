@@ -1,4 +1,14 @@
-import { useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useRef } from "react";
+import {
+  SettingsIndicator,
+  SettingsMotionPane,
+  useSettingsGeneration,
+  useSettingsMotion,
+  useSettingsPresence,
+  type Pane,
+  type SettingsSection,
+} from "./settingsMotion";
+import "../styles/settings-motion.css";
 import {
   Download,
   Layers,
@@ -16,19 +26,7 @@ import type {
 import type { Theme, usePreferences } from "./primitives";
 import { useEditorPreferences } from "./editorPreferences";
 
-export function SettingsView({
-  email,
-  preferences,
-  onSignOut,
-  onExport,
-  onErase,
-  onOpenJournal,
-  onDone,
-  onSetup,
-  setupUnavailable = false,
-  studyOwner = { status: "unavailable" },
-  onStudyGuardReady,
-}: {
+type SettingsProps = {
   studyOwner?: StudySettingsOwner;
   onStudyGuardReady?: (guard: SettingsLeaveGuard | null) => void;
   onSetup?: () => void;
@@ -40,332 +38,473 @@ export function SettingsView({
   onErase: () => void;
   onOpenJournal?: () => void;
   onDone: () => void;
-}) {
-  const [section, setSection] = useState<
-    "general" | "editor" | "sync" | "study" | "journal" | "apps" | "data"
-  >("general");
-  const editor = useEditorPreferences();
-  const studyGuard = useRef<SettingsLeaveGuard | null>(null);
+};
+const unavailable: StudySettingsOwner = { status: "unavailable" };
+export function SettingsView(props: SettingsProps) {
+  const {
+    email,
+    preferences,
+    onDone,
+    onStudyGuardReady,
+    studyOwner = unavailable,
+  } = props;
+  const generation = useSettingsGeneration(studyOwner, email);
+  const policy = useSettingsMotion(preferences.motion);
+  const presence = useSettingsPresence(generation, policy);
+  const section = presence.current.section;
+  const guard = useRef<{
+    paneInstanceId: number;
+    ownerGeneration: number;
+    guard: SettingsLeaveGuard;
+  } | null>(null);
+  const current = useRef(presence.current);
+  current.current = presence.current;
+  const callback = useRef(onStudyGuardReady);
+  callback.current = onStudyGuardReady;
+  const alive = useRef(true);
+  useLayoutEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+      guard.current = null;
+      callback.current?.(null);
+    };
+  }, []);
+  useLayoutEffect(() => {
+    if (
+      guard.current &&
+      (guard.current.paneInstanceId !== current.current.instanceId ||
+        guard.current.ownerGeneration !== generation)
+    ) {
+      guard.current = null;
+      callback.current?.(null);
+    }
+  }, [generation, presence.current.instanceId]);
+  const register = useCallback(
+    (pane: Pane, value: SettingsLeaveGuard | null) => {
+      if (value) {
+        if (
+          !alive.current ||
+          current.current.instanceId !== pane.instanceId ||
+          current.current.ownerGeneration !== pane.ownerGeneration
+        )
+          return;
+        guard.current = {
+          paneInstanceId: pane.instanceId,
+          ownerGeneration: pane.ownerGeneration,
+          guard: value,
+        };
+        callback.current?.(value);
+      } else if (
+        guard.current?.paneInstanceId === pane.instanceId &&
+        guard.current.ownerGeneration === pane.ownerGeneration
+      ) {
+        guard.current = null;
+        callback.current?.(null);
+      }
+    },
+    [],
+  );
   function leave(action: () => void) {
-    if (studyGuard.current) studyGuard.current.requestLeave(action);
-    else action();
+    const owner = generation;
+    const instance = current.current.instanceId;
+    const proceed = () => {
+      if (
+        alive.current &&
+        current.current.ownerGeneration === owner &&
+        current.current.instanceId === instance
+      )
+        action();
+    };
+    const lease = guard.current;
+    if (
+      lease?.paneInstanceId === current.current.instanceId &&
+      lease.ownerGeneration === owner
+    )
+      lease.guard.requestLeave(proceed);
+    else proceed();
   }
-  function registerGuard(guard: SettingsLeaveGuard | null) {
-    studyGuard.current = guard;
-    onStudyGuardReady?.(guard);
+  const nav = useRef<HTMLElement>(null);
+  function navigate(id: SettingsSection) {
+    leave(() => {
+      if (id === section) return;
+      nav.current
+        ?.querySelector<HTMLButtonElement>(`[data-settings-section="${id}"]`)
+        ?.focus();
+      guard.current = null;
+      callback.current?.(null);
+      presence.navigate(id);
+    });
   }
   return (
-    <div className="settings-layout">
-      <nav className="settings-nav" aria-label="Settings sections">
-        {(
-          [
-            ["general", "General", Settings, false],
-            ["editor", "Editor", Type, false],
-            ["sync", "Sync", RefreshCw, true],
-            ["study", "Study", Layers, false],
-            ["journal", "Journal", Sun, false],
-            ["apps", "Connected apps", Plug, true],
-            ["data", "Data and export", Download, false],
-          ] as const
-        ).map(([id, label, Icon, planned]) => (
-          <button
-            key={id}
-            aria-current={section === id ? "page" : undefined}
-            onClick={() => leave(() => setSection(id))}
-          >
-            <Icon size={15} aria-hidden="true" />
-            <span>{label}</span>
-            {planned && (
-              <>
-                {" "}
-                <small className="settings-planned">Planned</small>
-              </>
-            )}
-          </button>
-        ))}
-      </nav>
-      <div
-        className={
-          section === "study"
-            ? "settings-pane settings-study-pane"
-            : "settings-pane"
-        }
-      >
-        <header className="settings-heading">
-          <h3>
-            {
-              {
-                general: "General",
-                editor: "Editor",
-                sync: "Sync",
-                study: "Study",
-                journal: "Journal",
-                apps: "Connected apps",
-                data: "Data and export",
-              }[section]
-            }
-          </h3>
-          <button onClick={() => leave(onDone)}>Done</button>
-        </header>
-        <div className="settings-content">
-          {section === "general" ? (
-            <>
-              <div className="settings-row">
-                <div>
-                  <b>Account</b>
-                  <small>{email}</small>
-                </div>
-                <button onClick={onSignOut}>Sign out</button>
-              </div>
-              <div className="settings-row">
-                <b>Plan</b>
-                <span>Planned</span>
-              </div>
-              {onSetup && (
-                <div className="settings-row">
-                  <div>
-                    <b>Set up Notes</b>
-                    <small>
-                      {setupUnavailable
-                        ? "Finish the current note-link request first."
-                        : "Optional import and local storage setup."}
-                    </small>
-                  </div>
-                  <button disabled={setupUnavailable} onClick={onSetup}>
-                    Set up Notes
-                  </button>
-                </div>
+    <div className="settings-layout" data-settings-motion={policy}>
+      <nav ref={nav} className="settings-nav" aria-label="Settings sections">
+        <SettingsIndicator
+          key={generation}
+          className="settings-nav-indicators"
+          selector='[aria-current="page"]'
+          policy={policy}
+        >
+          {(
+            [
+              ["general", "General", Settings, false],
+              ["editor", "Editor", Type, false],
+              ["sync", "Sync", RefreshCw, true],
+              ["study", "Study", Layers, false],
+              ["journal", "Journal", Sun, false],
+              ["apps", "Connected apps", Plug, true],
+              ["data", "Data and export", Download, false],
+            ] as const
+          ).map(([id, label, Icon, planned]) => (
+            <button
+              key={id}
+              data-settings-section={id}
+              aria-current={section === id ? "page" : undefined}
+              onClick={() => navigate(id)}
+            >
+              <Icon size={15} aria-hidden="true" />
+              <span>{label}</span>
+              {planned && (
+                <>
+                  {" "}
+                  <small className="settings-planned">Planned</small>
+                </>
               )}
-              <div className="settings-row">
-                <div>
-                  <b>Appearance</b>
-                </div>
-                <div
-                  className="settings-segments"
-                  role="group"
-                  aria-label="Appearance"
-                >
-                  {(["system", "light", "dark", "dim"] as Theme[]).map(
-                    (value) => (
-                      <button
-                        key={value}
-                        aria-pressed={preferences.theme === value}
-                        onClick={() => preferences.setTheme(value)}
-                      >
-                        {value[0]?.toUpperCase()}
-                        {value.slice(1)}
-                      </button>
-                    ),
-                  )}
-                </div>
+            </button>
+          ))}
+        </SettingsIndicator>
+      </nav>
+      <div className="settings-pane settings-pane-stack">
+        <button className="settings-motion-done" onClick={() => leave(onDone)}>
+          Done
+        </button>
+        {[presence.outgoing, presence.current]
+          .filter((pane): pane is Pane => !!pane)
+          .map((pane) => (
+            <SettingsMotionPane
+              key={pane.instanceId}
+              pane={pane}
+              policy={policy}
+              elements={presence.elements}
+              complete={presence.complete}
+            >
+              <SettingsPaneContent
+                {...props}
+                studyOwner={studyOwner}
+                section={pane.section}
+                pane={pane}
+                register={register}
+                leave={leave}
+                policy={policy}
+              />
+            </SettingsMotionPane>
+          ))}
+      </div>
+    </div>
+  );
+}
+
+function SettingsPaneContent({
+  email,
+  preferences,
+  onSignOut,
+  onExport,
+  onErase,
+  onOpenJournal,
+  onSetup,
+  setupUnavailable = false,
+  studyOwner = unavailable,
+  section,
+  pane,
+  register,
+  leave,
+  policy,
+}: SettingsProps & {
+  section: SettingsSection;
+  pane: Pane;
+  register: (pane: Pane, guard: SettingsLeaveGuard | null) => void;
+  leave: (action: () => void) => void;
+  policy: "full" | "reduced";
+}) {
+  const editor = useEditorPreferences();
+  const registerGuard = useCallback(
+    (value: SettingsLeaveGuard | null) => register(pane, value),
+    [register, pane.instanceId, pane.ownerGeneration],
+  );
+  return (
+    <>
+      <header className="settings-heading">
+        <h3>
+          {
+            {
+              general: "General",
+              editor: "Editor",
+              sync: "Sync",
+              study: "Study",
+              journal: "Journal",
+              apps: "Connected apps",
+              data: "Data and export",
+            }[section]
+          }
+        </h3>
+      </header>
+      <div className="settings-content">
+        {section === "general" ? (
+          <>
+            <div className="settings-row">
+              <div>
+                <b>Account</b>
+                <small>{email}</small>
               </div>
+              <button onClick={onSignOut}>Sign out</button>
+            </div>
+            <div className="settings-row">
+              <b>Plan</b>
+              <span>Planned</span>
+            </div>
+            {onSetup && (
               <div className="settings-row">
                 <div>
-                  <b>Motion</b>
+                  <b>Set up Notes</b>
+                  <small>
+                    {setupUnavailable
+                      ? "Finish the current note-link request first."
+                      : "Optional import and local storage setup."}
+                  </small>
                 </div>
-                <div
-                  className="settings-segments"
-                  role="group"
-                  aria-label="Motion"
-                >
-                  {["system", "on", "reduced"].map((value) => (
+                <button disabled={setupUnavailable} onClick={onSetup}>
+                  Set up Notes
+                </button>
+              </div>
+            )}
+            <div className="settings-row">
+              <div>
+                <b>Appearance</b>
+              </div>
+              <SettingsIndicator
+                className="settings-segments"
+                selector='[aria-pressed="true"]'
+                policy={policy}
+                label="Appearance"
+              >
+                {(["system", "light", "dark", "dim"] as Theme[]).map(
+                  (value) => (
                     <button
                       key={value}
-                      aria-pressed={preferences.motion === value}
-                      onClick={() => preferences.setMotion(value)}
+                      aria-pressed={preferences.theme === value}
+                      onClick={() => preferences.setTheme(value)}
                     >
                       {value[0]?.toUpperCase()}
                       {value.slice(1)}
                     </button>
-                  ))}
-                </div>
-              </div>
-              <div className="settings-row">
-                <b>Language</b>
-                <div>
-                  <span>English</span>
-                  <small>More languages · Planned</small>
-                </div>
-              </div>
-              <div className="settings-row">
-                <b>Open at login</b>
-                <span>Planned</span>
-              </div>
-              <div className="settings-row">
-                <b>Week starts on</b>
-                <span>Planned</span>
-              </div>
-            </>
-          ) : section === "editor" ? (
-            <>
-              <div className="settings-row">
-                <b>Font</b>
-                <span>Geist</span>
-              </div>
-              <div className="settings-row">
-                <b>Text size</b>
-                <div
-                  className="settings-segments"
-                  role="group"
-                  aria-label="Text size"
-                >
-                  {(["small", "medium", "large"] as const).map((size) => (
-                    <button
-                      key={size}
-                      aria-pressed={editor.preferences.textSize === size}
-                      onClick={() => editor.setPreferences({ textSize: size })}
-                    >
-                      {size.charAt(0).toUpperCase() + size.slice(1)}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div className="settings-row">
-                <b>Line width</b>
-                <div
-                  className="settings-segments"
-                  role="group"
-                  aria-label="Line width"
-                >
-                  {(["narrow", "wide"] as const).map((width) => (
-                    <button
-                      key={width}
-                      aria-pressed={editor.preferences.lineWidth === width}
-                      onClick={() =>
-                        editor.setPreferences({ lineWidth: width })
-                      }
-                    >
-                      {width.charAt(0).toUpperCase() + width.slice(1)}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <label className="settings-row settings-toggle">
-                <span>
-                  <b>Turn Markdown into formatting while typing</b>
-                  <small>Type ## and a space to make a heading</small>
-                </span>
-                <input
-                  type="checkbox"
-                  checked={editor.preferences.markdown}
-                  onChange={(event) =>
-                    editor.setPreferences({ markdown: event.target.checked })
-                  }
-                />
-              </label>
-              <label className="settings-row settings-toggle">
-                <b>Check spelling</b>
-                <input
-                  type="checkbox"
-                  checked={editor.preferences.spellcheck}
-                  onChange={(event) =>
-                    editor.setPreferences({ spellcheck: event.target.checked })
-                  }
-                />
-              </label>
-              <div className="settings-row">
-                <div>
-                  <b>Show “Linked from” beside notes</b>
-                  <small>
-                    Planned · Opening backlinks by default isn’t available yet.
-                    Use Links and backlinks in a note.
-                  </small>
-                </div>
-                <input
-                  type="checkbox"
-                  aria-label="Show Linked from beside notes"
-                  disabled
-                />
-              </div>
-              <div className="settings-row">
-                <b>Open task and event chips in</b>
-                <span>Orbyn Planner · Planned</span>
-              </div>
-            </>
-          ) : section === "sync" || section === "apps" ? (
+                  ),
+                )}
+              </SettingsIndicator>
+            </div>
             <div className="settings-row">
               <div>
-                <b>Planned</b>
-                <small>
-                  {section === "sync"
-                    ? "Notes stay on this device in this beta."
-                    : "Connections to other apps and browser extensions aren’t available in this beta."}
-                </small>
+                <b>Motion</b>
+              </div>
+              <SettingsIndicator
+                className="settings-segments"
+                selector='[aria-pressed="true"]'
+                policy={policy}
+                label="Motion"
+              >
+                {["system", "on", "reduced"].map((value) => (
+                  <button
+                    key={value}
+                    aria-pressed={preferences.motion === value}
+                    onClick={() => preferences.setMotion(value)}
+                  >
+                    {value[0]?.toUpperCase()}
+                    {value.slice(1)}
+                  </button>
+                ))}
+              </SettingsIndicator>
+            </div>
+            <div className="settings-row">
+              <b>Language</b>
+              <div>
+                <span>English</span>
+                <small>More languages · Planned</small>
               </div>
             </div>
-          ) : section === "journal" ? (
-            <>
-              <div className="settings-row">
-                <b>Lock Journal with</b>
-                <span>A separate passphrase</span>
+            <div className="settings-row">
+              <b>Open at login</b>
+              <span>Planned</span>
+            </div>
+            <div className="settings-row">
+              <b>Week starts on</b>
+              <span>Planned</span>
+            </div>
+          </>
+        ) : section === "editor" ? (
+          <>
+            <div className="settings-row">
+              <b>Font</b>
+              <span>Geist</span>
+            </div>
+            <div className="settings-row">
+              <b>Text size</b>
+              <SettingsIndicator
+                className="settings-segments"
+                selector='[aria-pressed="true"]'
+                policy={policy}
+                label="Text size"
+              >
+                {(["small", "medium", "large"] as const).map((size) => (
+                  <button
+                    key={size}
+                    aria-pressed={editor.preferences.textSize === size}
+                    onClick={() => editor.setPreferences({ textSize: size })}
+                  >
+                    {size.charAt(0).toUpperCase() + size.slice(1)}
+                  </button>
+                ))}
+              </SettingsIndicator>
+            </div>
+            <div className="settings-row">
+              <b>Line width</b>
+              <SettingsIndicator
+                className="settings-segments"
+                selector='[aria-pressed="true"]'
+                policy={policy}
+                label="Line width"
+              >
+                {(["narrow", "wide"] as const).map((width) => (
+                  <button
+                    key={width}
+                    aria-pressed={editor.preferences.lineWidth === width}
+                    onClick={() => editor.setPreferences({ lineWidth: width })}
+                  >
+                    {width.charAt(0).toUpperCase() + width.slice(1)}
+                  </button>
+                ))}
+              </SettingsIndicator>
+            </div>
+            <label className="settings-row settings-toggle">
+              <span>
+                <b>Turn Markdown into formatting while typing</b>
+                <small>Type ## and a space to make a heading</small>
+              </span>
+              <input
+                type="checkbox"
+                checked={editor.preferences.markdown}
+                onChange={(event) =>
+                  editor.setPreferences({ markdown: event.target.checked })
+                }
+              />
+            </label>
+            <label className="settings-row settings-toggle">
+              <b>Check spelling</b>
+              <input
+                type="checkbox"
+                checked={editor.preferences.spellcheck}
+                onChange={(event) =>
+                  editor.setPreferences({ spellcheck: event.target.checked })
+                }
+              />
+            </label>
+            <div className="settings-row">
+              <div>
+                <b>Show “Linked from” beside notes</b>
+                <small>
+                  Planned · Opening backlinks by default isn’t available yet.
+                  Use Links and backlinks in a note.
+                </small>
               </div>
-              <div className="settings-row">
-                <b>Lock after</b>
-                <span>1 minute away</span>
+              <input
+                type="checkbox"
+                aria-label="Show Linked from beside notes"
+                disabled
+              />
+            </div>
+            <div className="settings-row">
+              <b>Open task and event chips in</b>
+              <span>Orbyn Planner · Planned</span>
+            </div>
+          </>
+        ) : section === "sync" || section === "apps" ? (
+          <div className="settings-row">
+            <div>
+              <b>Planned</b>
+              <small>
+                {section === "sync"
+                  ? "Notes stay on this device in this beta."
+                  : "Connections to other apps and browser extensions aren’t available in this beta."}
+              </small>
+            </div>
+          </div>
+        ) : section === "journal" ? (
+          <>
+            <div className="settings-row">
+              <b>Lock Journal with</b>
+              <span>A separate passphrase</span>
+            </div>
+            <div className="settings-row">
+              <b>Lock after</b>
+              <span>1 minute away</span>
+            </div>
+            <div className="settings-row">
+              <b>Evening reminder</b>
+              <span>Planned</span>
+            </div>
+            <div className="settings-row">
+              <div>
+                <b>Prompts and habits</b>
+                <small>Open Journal to manage prompts and habits.</small>
+                <small>
+                  In Journal, choose Journal settings from its menu.
+                </small>
               </div>
-              <div className="settings-row">
-                <b>Evening reminder</b>
-                <span>Planned</span>
+              <button
+                disabled={!onOpenJournal}
+                onClick={() => onOpenJournal && leave(onOpenJournal)}
+              >
+                Open Journal
+              </button>
+            </div>
+          </>
+        ) : section === "study" ? (
+          <StudySettingsPanel owner={studyOwner} onGuardReady={registerGuard} />
+        ) : (
+          <>
+            <div className="settings-row">
+              <div>
+                <b>Export all notes</b>
+                <small>
+                  Local only. Clearing browser data removes your notes. Export a
+                  copy first.
+                </small>
               </div>
-              <div className="settings-row">
-                <div>
-                  <b>Prompts and habits</b>
-                  <small>Open Journal to manage prompts and habits.</small>
-                  <small>
-                    In Journal, choose Journal settings from its menu.
-                  </small>
-                </div>
-                <button
-                  disabled={!onOpenJournal}
-                  onClick={() => onOpenJournal && leave(onOpenJournal)}
-                >
-                  Open Journal
-                </button>
+              <button onClick={onExport}>Export all notes</button>
+            </div>
+            <div className="settings-row">
+              <div>
+                <b>Export Journal</b>
+                <small>
+                  Open Journal, then choose Export Journal from its menu.
+                </small>
               </div>
-            </>
-          ) : section === "study" ? (
-            <StudySettingsPanel
-              owner={studyOwner}
-              onGuardReady={registerGuard}
-            />
-          ) : (
-            <>
-              <div className="settings-row">
-                <div>
-                  <b>Export all notes</b>
-                  <small>
-                    Local only. Clearing browser data removes your notes. Export
-                    a copy first.
-                  </small>
-                </div>
-                <button onClick={onExport}>Export all notes</button>
+              <button
+                disabled={!onOpenJournal}
+                onClick={() => onOpenJournal && leave(onOpenJournal)}
+              >
+                Open Journal to export
+              </button>
+            </div>
+            <div className="settings-row">
+              <div>
+                <b>Erase this browser</b>
               </div>
-              <div className="settings-row">
-                <div>
-                  <b>Export Journal</b>
-                  <small>
-                    Open Journal, then choose Export Journal from its menu.
-                  </small>
-                </div>
-                <button
-                  disabled={!onOpenJournal}
-                  onClick={() => onOpenJournal && leave(onOpenJournal)}
-                >
-                  Open Journal to export
-                </button>
-              </div>
-              <div className="settings-row">
-                <div>
-                  <b>Erase this browser</b>
-                </div>
-                <button className="danger" onClick={onErase}>
-                  Erase this browser
-                </button>
-              </div>
-            </>
-          )}
-        </div>
+              <button className="danger" onClick={onErase}>
+                Erase this browser
+              </button>
+            </div>
+          </>
+        )}
       </div>
-    </div>
+    </>
   );
 }

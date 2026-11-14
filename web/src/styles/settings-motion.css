@@ -1,0 +1,119 @@
+/* Notes settings frame + Motion settings/toggle/segmented, aed675f3. */
+.settings-nav-indicators {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.settings-indicator {
+  position: absolute;
+  left: 0;
+  top: 0;
+  pointer-events: none;
+  border-radius: 8px;
+  background: var(--sel);
+  transition: transform 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.settings-nav-indicators > button,
+.settings-segments > button {
+  position: relative;
+}
+.settings-layout .settings-nav button[aria-current="page"] {
+  background: transparent;
+}
+.settings-nav button {
+  transition: color 150ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.settings-pane-stack {
+  display: grid;
+  position: relative;
+  align-content: start;
+}
+.settings-motion-pane {
+  grid-area: 1 / 1;
+  min-width: 0;
+  align-self: start;
+}
+.settings-motion-pane[inert] {
+  pointer-events: none;
+}
+.settings-motion-pane .settings-heading {
+  padding-right: 100px;
+}
+.settings-motion-done {
+  position: absolute;
+  z-index: 1;
+  top: 22px;
+  right: 28px;
+}
+.settings-segments {
+  position: relative;
+}
+.settings-segments > .settings-indicator {
+  border-radius: 7px;
+  background: var(--main);
+  box-shadow: 0 0 0 1px var(--line);
+}
+.settings-segments > button {
+  transition: color 150ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.settings-layout .settings-segments > button[aria-pressed="true"] {
+  background: transparent;
+  box-shadow: none;
+}
+.settings-layout .settings-row input[type="checkbox"] {
+  transition: background-color 150ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.settings-layout .settings-row input[type="checkbox"]::after {
+  left: 2px;
+  transform: translateX(0);
+  transition: transform 150ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.settings-layout .settings-row input[type="checkbox"]:checked::after {
+  left: 2px;
+  transform: translateX(12px);
+}
+.settings-layout[data-settings-motion="reduced"]
+  .settings-row
+  input[type="checkbox"]::after {
+  transition: none;
+}
+.settings-layout[data-settings-motion="reduced"] .settings-indicator {
+  transition: none;
+}
+@media (max-width: 899px) {
+  .settings-nav-indicators {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+  .settings-motion-done {
+    top: 18px;
+    right: 20px;
+  }
+}
+/* Study owns its values and labels; share the Notes switch's presentation only. */
+.settings-layout .study-settings-row > input[type="checkbox"] {
+  position: relative;
+  background-image: none;
+  transition: background-color 150ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.settings-layout .study-settings-row > input[type="checkbox"]::after {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--main);
+  transform: translateX(0);
+  transition: transform 150ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.settings-layout .study-settings-row > input[type="checkbox"]:checked::after {
+  transform: translateX(12px);
+}
+.settings-layout[data-settings-motion="reduced"]
+  .study-settings-row
+  > input[type="checkbox"]::after {
+  transition: none;
+}
