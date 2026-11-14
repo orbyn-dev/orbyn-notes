@@ -686,6 +686,10 @@ function LoadedStudySettings({
             />
           </div>
         ))}
+        <PlannedStudyRow
+          label="Daily reminder"
+          help="Reminders aren’t available in this beta."
+        />
         <div className="study-settings-row">
           <label htmlFor={`${id}-day`}>
             <b>Day starts at</b>
@@ -756,6 +760,21 @@ function LoadedStudySettings({
             />
           </label>
         ))}
+        {(
+          [
+            [
+              "Add a daily Study task to Planner",
+              "Planner integration isn’t available.",
+            ],
+            [
+              "Suggest cards when I finish a note",
+              "Card suggestions aren’t available.",
+            ],
+            ["Let my agent make cards", "Agent setup isn’t available."],
+          ] as const
+        ).map(([label, help]) => (
+          <PlannedStudyRow key={label} label={label} help={help} />
+        ))}
         {notice && (
           <p
             role={
@@ -817,28 +836,6 @@ function LoadedStudySettings({
           </button>
         </div>
       </form>
-      <div className="study-settings-planned">
-        {[
-          ["Daily reminder", "Reminders aren’t available in this beta."],
-          [
-            "Add a daily Study task to Planner",
-            "Planner integration isn’t available.",
-          ],
-          [
-            "Suggest cards when I finish a note",
-            "Card suggestions aren’t available.",
-          ],
-          ["Let my agent make cards", "Agent setup isn’t available."],
-        ].map(([label, help]) => (
-          <div className="study-settings-row" key={label}>
-            <div>
-              <b>{label}</b>
-              <small>Planned · {help}</small>
-            </div>
-            <span className="study-planned-label">Planned</span>
-          </div>
-        ))}
-      </div>
       {confirm && (
         <Dialog
           title={
@@ -896,5 +893,17 @@ function LoadedStudySettings({
         </Dialog>
       )}
     </section>
+  );
+}
+
+function PlannedStudyRow({ label, help }: { label: string; help: string }) {
+  return (
+    <div className="study-settings-row">
+      <div>
+        <b>{label}</b>
+        <small>Planned · {help}</small>
+      </div>
+      <span className="study-planned-label">Planned</span>
+    </div>
   );
 }
