@@ -74,6 +74,20 @@ try {
     "inert",
     "",
   );
+  const isolation = await page.evaluate(() => {
+    const outgoing = document.querySelector('[data-phase="outgoing"] button');
+    outgoing.focus();
+    outgoing.click();
+    return {
+      focus: document.activeElement.dataset.settingsSection,
+      action: document.querySelector("output").textContent,
+    };
+  });
+  expect(isolation).toEqual({ focus: "editor", action: "none" });
+  measurements.push({
+    case: "outgoing native focus/click isolation",
+    ...isolation,
+  });
   // Hold the actual production animations for deterministic intermediate screenshots and numeric samples.
   const samples = [];
   for (const time of [0, 60, 120, 180, 240]) {
@@ -164,15 +178,19 @@ try {
     delay: 0,
     easing: "cubic-bezier(0.4, 0, 0.2, 1)",
   });
-  expect(
-    fade.frames.every((frame) => frame.transform === "translateY(0px)"),
-  ).toBe(true);
+  expect(fade.frames.every((frame) => frame.transform === "none")).toBe(true);
   expect(
     reduced.some(
       (run) =>
         run.target === "settings-indicator" && run.property === "transform",
     ),
   ).toBe(false);
+  expect(
+    await nav("Journal").evaluate((element) => ({
+      property: getComputedStyle(element).transitionProperty,
+      duration: getComputedStyle(element).transitionDuration,
+    })),
+  ).toEqual({ property: "color", duration: "0.15s" });
   // Policy change midflight settles before replay, then the System subscription follows the media query.
   await page.emulateMedia({ reducedMotion: "no-preference" });
   await stable("journal");
@@ -185,7 +203,51 @@ try {
   await group("Motion", "Reduced").click();
   await page.emulateMedia({ reducedMotion: "no-preference" });
   await choose("Editor");
+  const reducedFeedback = await page.evaluate(() => {
+    const style = (selector, pseudo) => {
+      const s = getComputedStyle(document.querySelector(selector), pseudo);
+      return {
+        property: s.transitionProperty,
+        duration: s.transitionDuration,
+        easing: s.transitionTimingFunction,
+      };
+    };
+    return {
+      nav: style(".settings-nav button"),
+      label: style(".settings-segments button"),
+      track: style('.settings-row input[type="checkbox"]'),
+      knob: style('.settings-row input[type="checkbox"]', "::after"),
+    };
+  });
+  for (const key of ["nav", "label"])
+    expect(reducedFeedback[key]).toMatchObject({
+      property: "color",
+      duration: "0.15s",
+      easing: "cubic-bezier(0.4, 0, 0.2, 1)",
+    });
+  expect(reducedFeedback.track).toMatchObject({
+    property: "background-color",
+    duration: "0.15s",
+  });
+  expect(reducedFeedback.knob.duration).toBe("0s");
+  measurements.push({
+    case: "explicit Reduced color feedback",
+    ...reducedFeedback,
+  });
+  await group("Text size", "Medium").click();
+  expect(
+    (await animations()).some(
+      (run) => run.property === "color" && run.timing.duration === 150,
+    ),
+  ).toBe(true);
+  await group("Text size", "Large").click();
   await toggle.click();
+  expect(
+    (await animations()).some(
+      (run) =>
+        run.property === "background-color" && run.timing.duration === 150,
+    ),
+  ).toBe(true);
   measurements.push({
     case: "explicit Reduced knob",
     duration: await toggle.evaluate(
@@ -256,13 +318,29 @@ try {
     dialog.getByRole("navigation").getByRole("button", { name, exact: true });
   await dialog
     .getByRole("group", { name: "Motion", exact: true })
-    .getByRole("button", { name: "On", exact: true })
+    .getByRole("button", { name: "Reduced", exact: true })
     .click();
   await realNav("Study").click();
   const field = dialog.getByRole("textbox", {
     name: "New cards per day",
     exact: true,
   });
+  await expect(field).toHaveValue("10");
+  expect(
+    await dialog
+      .getByRole("switch", { name: "Show streak", exact: true })
+      .evaluate((element) => ({
+        property: getComputedStyle(element).transitionProperty,
+        duration: getComputedStyle(element).transitionDuration,
+        knob: getComputedStyle(element, "::after").transitionDuration,
+      })),
+  ).toEqual({ property: "background-color", duration: "0.15s", knob: "0s" });
+  await realNav("General").click();
+  await dialog
+    .getByRole("group", { name: "Motion", exact: true })
+    .getByRole("button", { name: "On", exact: true })
+    .click();
+  await realNav("Study").click();
   await field.fill("9");
   await realNav("General").click();
   await expect(realNav("Study")).toHaveAttribute("aria-current", "page");
@@ -302,6 +380,22 @@ try {
     .getByRole("button", { name: "Open Journal", exact: true })
     .click();
   await expect(app.getByLabel("Passphrase", { exact: true })).toBeFocused();
+  await app.getByRole("button", { name: "Settings", exact: true }).click();
+  await realNav("Study").click();
+  await expect(field).toHaveValue("9");
+  const doneReceipt = await app.evaluate(() => {
+    document.querySelector('[data-settings-section="general"]').click();
+    const available = !document
+      .querySelector(".settings-motion-done")
+      .closest("[inert]");
+    document.querySelector(".settings-motion-done").click();
+    return { available };
+  });
+  expect(doneReceipt.available).toBe(true);
+  await expect(dialog).toHaveCount(0);
+  await expect(
+    app.getByRole("button", { name: "Settings", exact: true }),
+  ).toBeFocused();
   await app.getByRole("button", { name: "Settings", exact: true }).click();
   await realNav("Study").click();
   await expect(field).toHaveValue("9");

@@ -233,11 +233,13 @@ export function SettingsMotionPane({
       [
         {
           opacity: incoming ? 0 : (pane.opacity ?? 1),
-          transform: `translateY(${reduced ? 0 : incoming ? 6 : (pane.y ?? 0)}px)`,
+          transform: reduced
+            ? "none"
+            : `translateY(${incoming ? 6 : (pane.y ?? 0)}px)`,
         },
         {
           opacity: incoming ? 1 : 0,
-          transform: `translateY(${reduced || incoming ? 0 : 6}px)`,
+          transform: reduced ? "none" : `translateY(${incoming ? 0 : 6}px)`,
         },
       ],
       {

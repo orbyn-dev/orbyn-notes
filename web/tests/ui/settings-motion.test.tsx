@@ -253,9 +253,7 @@ it("honors explicit On over OS Reduce and follows System media changes without r
     delay: 0,
     easing: "cubic-bezier(.4,0,.2,1)",
   });
-  expect(
-    runs.at(-1)!.frames.every((f) => f.transform === "translateY(0px)"),
-  ).toBe(true);
+  expect(runs.at(-1)!.frames.every((f) => f.transform === "none")).toBe(true);
   const count = runs.length;
   reduced = false;
   act(() => changes.forEach((fn) => fn()));
