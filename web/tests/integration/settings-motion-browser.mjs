@@ -1,5 +1,7 @@
 import { chromium, expect } from "@playwright/test";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { withInertReferencePage } from "./inert-reference.ts";
+import { verifyInertReference } from "./inert-reference-browser.mjs";
 const output = process.env.NOTES_UI_OUTPUT ?? "test-results/settings-motion";
 const base = process.env.NOTES_PREVIEW_URL ?? "http://127.0.0.1:5198";
 await mkdir(output, { recursive: true });
@@ -40,6 +42,10 @@ async function animations() {
   );
 }
 try {
+  measurements.push({
+    case: "inert reference browser boundary",
+    ...(await verifyInertReference(browser)),
+  });
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto(`${base}/tests/integration/settings-shell-browser.html`);
   await group("Motion", "On").click();
@@ -424,36 +430,35 @@ try {
   measurements.push({ case: "same-turn real lock", ...lockReceipt });
   await real.close();
   if (process.env.NOTES_MOTION_REFERENCE) {
-    const reference = await context.newPage();
-    await reference.emulateMedia({ reducedMotion: "no-preference" });
-    await reference.setContent(
-      (await readFile(process.env.NOTES_MOTION_REFERENCE, "utf8")).replace(
-        /<script\b[^>]*>[\s\S]*?<\/script>/gi,
-        "",
-      ),
+    const values = await withInertReferencePage(
+      browser,
+      await readFile(process.env.NOTES_MOTION_REFERENCE, "utf8"),
+      (reference) =>
+        reference.evaluate(() => {
+          const style = (selector, pseudo) => {
+            const s = getComputedStyle(
+              document.querySelector(selector),
+              pseudo,
+            );
+            return {
+              duration: s.transitionDuration,
+              property: s.transitionProperty,
+              easing: s.transitionTimingFunction,
+            };
+          };
+          return {
+            highlight: style("#settings .sidehl .hlt"),
+            pane: style("#settings .pg"),
+            toggle: style("#toggle .mtg"),
+            knob: style("#toggle .mtg", "::after"),
+            segmented: style("#segmented .msg .th"),
+          };
+        }),
     );
-    const values = await reference.evaluate(() => {
-      const style = (selector, pseudo) => {
-        const s = getComputedStyle(document.querySelector(selector), pseudo);
-        return {
-          duration: s.transitionDuration,
-          property: s.transitionProperty,
-          easing: s.transitionTimingFunction,
-        };
-      };
-      return {
-        highlight: style("#settings .sidehl .hlt"),
-        pane: style("#settings .pg"),
-        toggle: style("#toggle .mtg"),
-        knob: style("#toggle .mtg", "::after"),
-        segmented: style("#segmented .msg .th"),
-      };
-    });
     expect(values.highlight.duration).toBe("0.2s");
     expect(values.knob.duration).toBe("0.15s");
     expect(values.segmented.duration).toBe("0.2s");
     measurements.push({ case: "reference computed styles", ...values });
-    await reference.close();
   }
   expect(errors).toEqual([]);
   await writeFile(
