@@ -668,3 +668,22 @@ it("ignores old reload completion after replacement or cleared action", async ()
   expect(view.result.current.reloaded).toBe(false);
   expect(view.result.current.error).toBe("");
 });
+describe("sidebar navigation state", () => {
+  it("marks only the active sidebar item as the current page", async () => {
+    workspace(library());
+    await screen.findByRole("heading", { name: "All notes" });
+    const nav = screen.getAllByRole("navigation")[0]!;
+    const current = () =>
+      within(nav)
+        .getAllByRole("button")
+        .filter((b) => b.getAttribute("aria-current") === "page");
+    expect(current().map((b) => b.className)).toEqual(["nav active"]);
+    expect(current()[0]).toHaveTextContent("All notes");
+    fireEvent.click(within(nav).getByRole("button", { name: /^Pinned/ }));
+    expect(current().map((b) => b.className)).toEqual(["nav active"]);
+    expect(current()[0]).toHaveTextContent("Pinned");
+    for (const b of within(nav).getAllByRole("button"))
+      if (!b.classList.contains("active"))
+        expect(b).not.toHaveAttribute("aria-current");
+  });
+});
