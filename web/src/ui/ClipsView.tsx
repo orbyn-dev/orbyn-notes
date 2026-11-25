@@ -1,5 +1,5 @@
 import { useRouteHeading, type HeadingPresentation } from "./routeHeadingMotion";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { zipSync, strToU8 } from "fflate";
 import type {
@@ -13,6 +13,7 @@ import type {
 } from "../clips/contracts";
 import { ClipDuplicateError } from "../clips/contracts";
 import { exportClipsFiles } from "../clips/transfer";
+import { clipUrl } from "../clips/validation";
 import { registerCloseGuard, trackOperation } from "../desktop/closeGuard";
 import { isDesktop } from "../desktop/window";
 import { saveDesktopFile } from "../desktop/files";
@@ -82,6 +83,9 @@ export function ClipsView({
   searchInvocation?: number;
   restoreSearchOrigin?: number;
 }) {
+  const urlErrorId = useId(),
+    urlInput = useRef<HTMLInputElement>(null),
+    [urlError, setUrlError] = useState("");
   const headingLive = useRef(heading);
   headingLive.current = heading;
   const headingOwner = useRef(store);
@@ -270,6 +274,7 @@ export function ClipsView({
         setDiscard(null);
         setDuplicate(null);
         setOperationError("");
+        setUrlError("");
         setConflict(false);
         setReloaded(false);
         setBusy(false);
@@ -366,6 +371,7 @@ export function ClipsView({
     draftRef.current = next;
     setDraft(next);
     setOperationError("");
+    if ("url" in patch) setUrlError("");
     setDuplicate(null);
   }
   function openForm() {
@@ -376,6 +382,7 @@ export function ClipsView({
     setDuplicate(null);
     setForm(true);
     setOperationError("");
+    setUrlError("");
   }
   function closeForm() {
     if (pending.current) return;
@@ -538,6 +545,15 @@ export function ClipsView({
   }
   async function save(allowDuplicate = false) {
     if (!current.current || pending.current || operation.current) return;
+    if (!allowDuplicate) {
+      try {
+        clipUrl(draftRef.current.url);
+      } catch {
+        setUrlError("Enter a web link that starts with http:// or https://.");
+        urlInput.current?.focus();
+        return;
+      }
+    }
     const input: ClipActionInput = {
       kind: "create",
       ...structuredClone(draftRef.current),
@@ -1042,12 +1058,20 @@ export function ClipsView({
               URL
               <input
                 aria-label="Clip URL"
+                ref={urlInput}
                 autoFocus
+                aria-invalid={urlError ? true : undefined}
+                aria-describedby={urlError ? urlErrorId : undefined}
                 value={draft.url}
                 disabled={busy || !!operation.current || !!duplicate}
                 onChange={(event) => change({ url: event.target.value })}
               />
             </label>
+            {urlError && (
+              <p className="error" id={urlErrorId} role="alert">
+                {urlError}
+              </p>
+            )}
             <label>
               Title (optional)
               <input
