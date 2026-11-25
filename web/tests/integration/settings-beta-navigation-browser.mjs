@@ -159,7 +159,7 @@ try {
     name: "Erase notes from this browser?",
     exact: true,
   });
-  await expect(button(erase, "Erase notes")).toBeDisabled();
+  await expect(button(erase, "Erase this browser")).toBeDisabled();
   await button(erase, "Cancel").click();
   await button(settings(), "Open Journal to export").click();
   await expect(button(page, "Journal menu")).toBeVisible();

@@ -3295,7 +3295,7 @@ export function Workspace({
                 }
               }}
             >
-              Erase notes
+              {storageCopy(!!desktop).eraseLabel}
             </button>
             <button
               disabled={busy || libraryAction.busy || !!libraryAction.error}

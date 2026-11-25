@@ -126,24 +126,32 @@ export function AccountView({
           >
             <div className="stack">
               {step === "invite" ? (
-                <label>
-                  Invite code
-                  <input
-                    autoFocus
-                    autoComplete="off"
-                    value={invite}
-                    onChange={(e) =>
-                      setInvite(
-                        e.target.value
-                          .replace(/[^a-z0-9]/gi, "")
-                          .slice(0, 16)
-                          .toUpperCase()
-                          .match(/.{1,4}/g)
-                          ?.join("-") ?? "",
-                      )
-                    }
-                  />
-                </label>
+                <>
+                  <label>
+                    Invite code
+                    <input
+                      autoFocus
+                      autoComplete="off"
+                      placeholder="XXXX-XXXX-XXXX-XXXX"
+                      aria-describedby="invite-code-hint"
+                      value={invite}
+                      onChange={(e) =>
+                        setInvite(
+                          e.target.value
+                            .replace(/[^a-z0-9]/gi, "")
+                            .slice(0, 16)
+                            .toUpperCase()
+                            .match(/.{1,4}/g)
+                            ?.join("-") ?? "",
+                        )
+                      }
+                    />
+                  </label>
+                  <small id="invite-code-hint">
+                    Paste it with or without dashes or spaces. Upper or lower
+                    case both work.
+                  </small>
+                </>
               ) : null}
               {(step === "signin" || step === "register") && (
                 <>
@@ -208,6 +216,9 @@ export function AccountView({
               {notice && <p role="status">{notice}</p>}
               <button
                 className="primary"
+                aria-describedby={
+                  step === "invite" ? "invite-code-hint" : undefined
+                }
                 disabled={
                   busy ||
                   (step === "invite" &&

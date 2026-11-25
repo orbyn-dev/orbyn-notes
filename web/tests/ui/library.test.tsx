@@ -525,7 +525,9 @@ it("passes the actual read-only generation only after typed erase confirmation",
   fireEvent.change(within(dialog).getByLabelText("Type ERASE to confirm"), {
     target: { value: "ERASE" },
   });
-  fireEvent.click(within(dialog).getByRole("button", { name: "Erase notes" }));
+  fireEvent.click(
+    within(dialog).getByRole("button", { name: "Erase this browser" }),
+  );
   await waitFor(() =>
     expect(api.eraseLegacy).toHaveBeenCalledWith(
       { deviceGeneration: 47, confirmation: "ERASE" },
@@ -573,7 +575,7 @@ it.each(["ready", "legacy-read-only"] as const)(
       within(dialog).getByRole("button", { name: "Open Journal to export" }),
     ).toBeEnabled();
     expect(
-      within(dialog).getByRole("button", { name: "Erase notes" }),
+      within(dialog).getByRole("button", { name: "Erase this browser" }),
     ).toBeDisabled();
     expect(api.eraseLegacy).not.toHaveBeenCalled();
   },

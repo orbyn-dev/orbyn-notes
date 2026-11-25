@@ -120,7 +120,7 @@ describe("settings", () => {
       name: "Erase notes from this browser?",
     });
     expect(
-      within(eraseDialog).getByRole("button", { name: "Erase notes" }),
+      within(eraseDialog).getByRole("button", { name: "Erase this browser" }),
     ).toBeDisabled();
     fireEvent.click(
       within(eraseDialog).getByRole("button", { name: "Cancel" }),
@@ -146,8 +146,25 @@ describe("settings", () => {
       { target: { value: "ERASE" } },
     );
     fireEvent.click(
-      within(confirmation).getByRole("button", { name: "Erase notes" }),
+      within(confirmation).getByRole("button", { name: "Erase this browser" }),
     );
     await waitFor(() => expect(store.erase).toHaveBeenCalledTimes(1));
+  });
+  it("names the destructive erase action the same in Settings and its confirmation", async () => {
+    const { dialog } = await mount();
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Data and export" }),
+    );
+    const settingsAction = within(dialog).getByRole("button", {
+      name: "Erase this browser",
+    });
+    const actionName = settingsAction.textContent ?? "";
+    fireEvent.click(settingsAction);
+    const confirmation = screen.getByRole("dialog", {
+      name: "Erase notes from this browser?",
+    });
+    expect(
+      within(confirmation).getByRole("button", { name: actionName }),
+    ).toHaveClass("danger");
   });
 });
