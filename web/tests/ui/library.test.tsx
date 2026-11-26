@@ -216,7 +216,7 @@ describe("Tags design", () => {
   it("shows the designed column headings, count and persistent deletion note", () => {
     const view = renderTags();
     expect(screen.getByRole("heading", { name: "Tags" })).toBeInTheDocument();
-    expect(screen.getByText("1 tags")).toBeInTheDocument();
+    expect(screen.getByText("1 tag")).toBeInTheDocument();
     expect(
       screen.getAllByRole("columnheader").map((cell) => cell.textContent),
     ).toEqual(["Name", "Notes", "Last used", ""]);
