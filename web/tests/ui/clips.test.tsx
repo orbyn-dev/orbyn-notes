@@ -618,3 +618,28 @@ it("initializes persisted reader preferences when Clips opens before the editor 
   expect(f.prepare).not.toHaveBeenCalled();
   localStorage.removeItem("notes.editor.v1");
 });
+it.each(["javascript:void(0)", "not a url"])(
+  "ties the same inline URL error to the field for %s",
+  async (value) => {
+    const f = fixture();
+    render(<ClipsView store={f.api} />);
+    const dialog = await openForm();
+    const input = within(dialog).getByLabelText("Clip URL");
+    expect(input).not.toHaveAttribute("aria-invalid");
+    fireEvent.change(input, { target: { value } });
+    fireEvent.click(within(dialog).getByText("Save link"));
+    const error = await within(dialog).findByText(
+      "Enter a web link that starts with http:// or https://.",
+    );
+    expect(input).toHaveAttribute("aria-invalid", "true");
+    expect(input.getAttribute("aria-describedby")).toContain(error.id);
+    expect(error.id).not.toBe("");
+    expect(input).toHaveFocus();
+    expect(f.prepare).not.toHaveBeenCalled();
+    fireEvent.change(input, { target: { value: "https://example.test/ok" } });
+    expect(input).not.toHaveAttribute("aria-invalid");
+    expect(
+      within(dialog).queryByText(/Enter a web link/),
+    ).not.toBeInTheDocument();
+  },
+);
