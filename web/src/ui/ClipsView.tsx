@@ -1020,12 +1020,19 @@ export function ClipsView({
                   : "No clips yet"}
           </h2>
           <p>
-            Save a link and any text you want to keep. Orbyn does not fetch the
-            page in this version.
+            {filter === "archived"
+              ? "Archived clips appear here."
+              : filter === "unread"
+                ? "You’re all caught up."
+                : filter === "later"
+                  ? "Clips you mark for read later appear here."
+                  : "Save a link and any text you want to keep. Orbyn does not fetch the page in this version."}
           </p>
-          <button onClick={openForm} disabled={busy || !!operation.current}>
-            Save a link
-          </button>
+          {filter === "all" && (
+            <button onClick={openForm} disabled={busy || !!operation.current}>
+              Save a link
+            </button>
+          )}
         </div>
       )}
       {form && (

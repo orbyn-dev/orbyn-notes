@@ -618,3 +618,22 @@ it("initializes persisted reader preferences when Clips opens before the editor 
   expect(f.prepare).not.toHaveBeenCalled();
   localStorage.removeItem("notes.editor.v1");
 });
+it.each([
+  ["Unread", "No unread clips", "You’re all caught up."],
+  ["Read later", "Nothing in read later", "Clips you mark for read later appear here."],
+  ["Archived", "No archived clips", "Archived clips appear here."],
+])("words the empty %s filter on its own with no Save a link action", async (label, heading, body) => {
+  const f = fixture([{ ...clip, readAt: new Date().toISOString() }]);
+  render(<ClipsView store={f.api} />);
+  await screen.findByRole("button", { name: /^Unread/ });
+  fireEvent.click(screen.getByRole("button", { name: new RegExp(`^${label}`) }));
+  expect(screen.getByRole("heading", { name: heading })).toBeInTheDocument();
+  expect(screen.getByText(body)).toBeInTheDocument();
+  expect(screen.queryByText(/Orbyn does not fetch/)).not.toBeInTheDocument();
+  expect(screen.getAllByRole("button", { name: "Save a link" })).toHaveLength(1);
+});
+it("keeps the Save a link empty state for All", async () => {
+  render(<ClipsView store={fixture().api} />);
+  expect(await screen.findByRole("heading", { name: "No clips yet" })).toBeInTheDocument();
+  expect(screen.getAllByRole("button", { name: "Save a link" })).toHaveLength(2);
+});
