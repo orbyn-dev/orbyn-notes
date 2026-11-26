@@ -894,6 +894,14 @@ export function StudyView({
     )
       return;
     const target = event.target as HTMLElement;
+    // Space is the review's Show answer key, and the ✕ is its first Tab stop,
+    // so a keyboard user reaches the ✕ and presses Space. Reveal there instead
+    // of letting the focused control end the session; Enter and click end it.
+    if (event.key === " " && target.closest("[data-study-end]")) {
+      event.preventDefault();
+      if (!answer) reveal();
+      return;
+    }
     if (
       target.closest(
         'input,textarea,select,button,a,[role="button"],dialog,[contenteditable="true"],[role="menu"],[role="listbox"]',
@@ -1176,6 +1184,7 @@ export function StudyView({
             </span>
             <button
               aria-label="End session"
+              data-study-end=""
               disabled={busy || !!pendingReview.current}
               onClick={() => {
                 setSession(null);

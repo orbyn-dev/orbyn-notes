@@ -501,17 +501,20 @@ describe("local Study", () => {
     expect(state().study.cards[0]!.schedule.due).toBe(expectedDue);
   });
 
-  it("does not intercept Space on the focused End session button", async () => {
+  it("reveals the answer with Space on the focused End session button", async () => {
     const { store } = memoryStore(true);
     render(<StudyView store={store} />);
     fireEvent.click(
       await screen.findByRole("button", { name: "Study 1 card" }),
     );
+    // The ✕ is the review's first Tab stop, and Space shows the answer here.
     const end = screen.getByRole("button", { name: "End session" });
     end.focus();
-    expect(fireEvent.keyDown(end, { key: " " })).toBe(true);
-    expect(screen.queryByLabelText("Card answer")).not.toBeInTheDocument();
-    fireEvent.click(end);
+    expect(fireEvent.keyDown(end, { key: " " })).toBe(false);
+    await finishReveal();
+    expect(screen.getByRole("button", { name: "End session" })).toBeVisible();
+    expect(screen.getByLabelText("Card answer")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "End session" }));
     expect(screen.queryByLabelText("Card question")).not.toBeInTheDocument();
   });
   it("reconciles a committed grade after a lost response without grading twice", async () => {
