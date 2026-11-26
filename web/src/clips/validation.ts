@@ -90,6 +90,25 @@ export function clipUrl(value: unknown): {
     hostname: url.hostname,
   };
 }
+/** Duplicate detection only. The stored `canonicalUrl` keeps the shape older
+ * rows were written with, so the address noise BE-13 names is resolved here
+ * instead: WHATWG `URL` already drops the fragment, lower-cases the host, drops
+ * a default port and fills a bare origin, and this also ignores a trailing path
+ * slash and the `utm_*` tracking family. Documented differences stay distinct
+ * (scheme, host, port, path case and every other query parameter). */
+export function clipIdentity(value: string): string {
+  const url = new URL(value);
+  url.hash = "";
+  if (url.pathname !== "/") {
+    const path = url.pathname.replace(/\/+$/, "");
+    url.pathname = path || "/";
+  }
+  const params = url.searchParams;
+  for (const key of [...params.keys()])
+    if (/^utm_/i.test(key)) params.delete(key);
+  url.search = params.toString();
+  return url.toString();
+}
 export function validateClipAction(value: unknown): ClipActionInput {
   if (!value || typeof value !== "object") invalid();
   const kind = (value as { kind?: unknown }).kind;
