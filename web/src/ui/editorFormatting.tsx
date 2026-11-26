@@ -5,6 +5,7 @@ import {
   useLayoutEffect,
   useRef,
   useState,
+  type KeyboardEvent as ReactKeyboardEvent,
   type ReactElement,
   type ReactNode,
 } from "react";
@@ -819,10 +820,56 @@ export function EditorFormatting({
                 item.command,
               ) && editor.isActive(item.command),
           )?.label ?? "Text");
+  const toolbarRef = useRef<HTMLDivElement>(null);
+  const rovingStop = useRef<HTMLElement | null>(null);
+  const toolbarButtons = () =>
+    Array.from(
+      toolbarRef.current?.querySelectorAll<HTMLButtonElement>("button") ?? [],
+    ).filter((button) => !button.disabled);
+  useEffect(() => {
+    const buttons = toolbarButtons();
+    const stop =
+      rovingStop.current && buttons.includes(rovingStop.current as never)
+        ? rovingStop.current
+        : buttons[0];
+    for (const button of buttons) button.tabIndex = button === stop ? 0 : -1;
+  });
+  function moveToolbarFocus(event: ReactKeyboardEvent<HTMLDivElement>) {
+    if (
+      event.altKey ||
+      event.ctrlKey ||
+      event.metaKey ||
+      event.shiftKey ||
+      !["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)
+    )
+      return;
+    const buttons = toolbarButtons();
+    const index = buttons.findIndex((button) => button === event.target);
+    if (index < 0) return;
+    event.preventDefault();
+    const next =
+      event.key === "Home"
+        ? 0
+        : event.key === "End"
+          ? buttons.length - 1
+          : (index + (event.key === "ArrowRight" ? 1 : -1) + buttons.length) %
+            buttons.length;
+    buttons[next]?.focus();
+  }
   const toolbar = (
     <div
+      ref={toolbarRef}
       className="format editor-format-toolbar"
       role="toolbar"
+      onKeyDown={moveToolbarFocus}
+      onFocus={(event) => {
+        const target = event.target as HTMLElement;
+        if (target instanceof HTMLButtonElement && !target.disabled) {
+          rovingStop.current = target;
+          for (const button of toolbarButtons())
+            button.tabIndex = button === target ? 0 : -1;
+        }
+      }}
       aria-label="Formatting"
       inert={disabled}
       aria-disabled={disabled || undefined}

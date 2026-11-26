@@ -2046,6 +2046,7 @@ export function Workspace({
                 ? "nav active"
                 : "nav"
             }
+            aria-current={module === "notes" && !trash && !tag && !pinnedOnly && !linkedOnly ? "page" : undefined}
             onClick={() => navigate()}
           >
             <NoteIcon size={15} />
@@ -2058,6 +2059,7 @@ export function Workspace({
               return sidebarSelection.rowRef("journal")(node);
             }}
             className={module === "journal" ? "nav active" : "nav"}
+            aria-current={module === "journal" ? "page" : undefined}
             onClick={() => {
               if (!canNavigate()) return;
               requestHeading("journal", "journal");
@@ -2072,6 +2074,7 @@ export function Workspace({
           <button
             ref={sidebarSelection.rowRef("study")}
             className={module === "study" ? "nav active" : "nav"}
+            aria-current={module === "study" ? "page" : undefined}
             onClick={() => {
               if (!canNavigate()) return;
               requestHeading("study", "study");
@@ -2086,6 +2089,7 @@ export function Workspace({
           <button
             ref={sidebarSelection.rowRef("clips")}
             className={module === "clips" ? "nav active" : "nav"}
+            aria-current={module === "clips" ? "page" : undefined}
             onClick={() => {
               if (!canNavigate()) return;
               requestHeading("clips", "clips");
@@ -2104,6 +2108,7 @@ export function Workspace({
                 className={
                   module === "notes" && pinnedOnly ? "nav active" : "nav"
                 }
+                aria-current={module === "notes" && pinnedOnly ? "page" : undefined}
                 disabled={readOnly}
                 onClick={() => {
                   if (!canNavigate()) return;
@@ -2135,6 +2140,7 @@ export function Workspace({
                   className={
                     module === "notes" && linkedOnly ? "nav active" : "nav"
                   }
+                  aria-current={module === "notes" && linkedOnly ? "page" : undefined}
                   onClick={() => {
                     if (!canNavigate()) return;
                     requestHeading("notes", "linked");
@@ -2155,6 +2161,7 @@ export function Workspace({
               <button
                 ref={sidebarSelection.rowRef("tags")}
                 className={module === "tags" ? "nav active" : "nav"}
+                aria-current={module === "tags" ? "page" : undefined}
                 disabled={readOnly}
                 onClick={() => {
                   if (!canNavigate()) return;
@@ -2182,6 +2189,7 @@ export function Workspace({
                 className={
                   module === "notes" && tag === t ? "nav active" : "nav"
                 }
+                aria-current={module === "notes" && tag === t ? "page" : undefined}
                 onClick={() => navigate(false, t)}
               >
                 <span
@@ -2210,6 +2218,7 @@ export function Workspace({
           <button
             ref={sidebarSelection.rowRef("trash")}
             className={module === "notes" && trash ? "nav active" : "nav"}
+            aria-current={module === "notes" && trash ? "page" : undefined}
             onClick={() => navigate(true)}
           >
             <Trash2 size={15} />

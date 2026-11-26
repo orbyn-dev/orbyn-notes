@@ -202,3 +202,34 @@ it("keeps context menus and tooltips in their owning modal and disables editing 
   );
   expect(changes).not.toHaveBeenCalled();
 });
+
+it("keeps the formatting toolbar as one roving tab stop", async () => {
+  render(<Controls onChange={vi.fn()} />);
+  await screen.findByRole("textbox", { name: "Note content" });
+  const toolbar = screen.getByRole("toolbar", { name: "Formatting" });
+  const enabled = () =>
+    within(toolbar)
+      .getAllByRole("button")
+      .filter((b) => !(b as HTMLButtonElement).disabled);
+  const stops = () => enabled().filter((b) => b.tabIndex === 0);
+  expect(stops()).toHaveLength(1);
+  expect(enabled().length).toBeGreaterThan(4);
+  const first = enabled()[0]!;
+  const second = enabled()[1]!;
+  expect(stops()[0]).toBe(first);
+  first.focus();
+  fireEvent.keyDown(first, { key: "ArrowRight" });
+  expect(document.activeElement).toBe(second);
+  expect(stops()).toEqual([second]);
+  fireEvent.keyDown(second, { key: "ArrowLeft" });
+  expect(document.activeElement).toBe(first);
+  fireEvent.keyDown(first, { key: "End" });
+  expect(document.activeElement).toBe(enabled().at(-1));
+  expect(stops()).toHaveLength(1);
+  fireEvent.keyDown(document.activeElement!, { key: "ArrowRight" });
+  expect(document.activeElement).toBe(first);
+  fireEvent.keyDown(first, { key: "Home" });
+  expect(document.activeElement).toBe(first);
+  fireEvent.keyDown(first, { key: "ArrowLeft" });
+  expect(document.activeElement).toBe(enabled().at(-1));
+});
