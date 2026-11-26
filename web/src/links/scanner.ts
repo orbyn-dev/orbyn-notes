@@ -67,6 +67,22 @@ export function scanLinkDocument(
     .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
     .map(([, row]) => row);
 }
+/** Detects reference atoms without charging work or validating their targets. */
+export function carriesNoteLink(document: unknown): boolean {
+  const queue: unknown[] = [document];
+  let visits = 0;
+  while (queue.length) {
+    const node = queue.pop();
+    if (!node || typeof node !== "object") continue;
+    if (++visits > NOTE_LINK_LIMITS.documentNodes) return false;
+    const value = node as RichNode;
+    if (value.type === "noteLink") return true;
+    if (Array.isArray(value.content))
+      for (let i = value.content.length - 1; i >= 0; i--)
+        queue.push(value.content[i]);
+  }
+  return false;
+}
 export function validateLinkRows(
   input: unknown,
   notes: readonly { id: string; revision: number }[],
