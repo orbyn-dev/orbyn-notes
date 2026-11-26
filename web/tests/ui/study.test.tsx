@@ -514,6 +514,19 @@ describe("local Study", () => {
     fireEvent.click(end);
     expect(screen.queryByLabelText("Card question")).not.toBeInTheDocument();
   });
+
+  it("ends the review on Escape, like the end-session control", async () => {
+    const { store } = memoryStore(true);
+    render(<StudyView store={store} />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Study 1 card" }),
+    );
+    expect(screen.getByLabelText("Card question")).toBeVisible();
+    const view = screen.getByRole("region", { name: "Study" });
+    fireEvent.keyDown(view, { key: "Escape" });
+    expect(screen.queryByLabelText("Card question")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Study 1 card" })).toBeVisible();
+  });
   it("reconciles a committed grade after a lost response without grading twice", async () => {
     const { store, update, state, loseNextCommitResponse } = memoryStore(true);
     render(<StudyView store={store} />);

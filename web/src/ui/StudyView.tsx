@@ -900,7 +900,13 @@ export function StudyView({
       )
     )
       return;
-    if (
+    // #st-review-ended: the ✕ or Esc ends at once with no confirm.
+    if (event.key === "Escape") {
+      event.preventDefault();
+      setSession(null);
+      setToast(null);
+      setError("");
+    } else if (
       (event.ctrlKey || event.metaKey) &&
       !event.shiftKey &&
       event.key.toLowerCase() === "z"
