@@ -29,6 +29,7 @@ import {
 import {
   validateClipAction,
   validateClipState,
+  clipIdentity,
   CLIP_LIMITS,
 } from "../../src/clips/validation";
 import { exportClipsFiles } from "../../src/clips/transfer";
@@ -267,6 +268,57 @@ it("checks canonical duplicates including archived clips, requires deliberate ne
   const again = await act(clips, { ...create, allowDuplicate: true });
   expect(again.snapshot.clips.items).toHaveLength(2);
   expect(again.snapshot.clips.items[1]!.id).not.toBe(item.id);
+});
+it("collapses a trailing path slash and utm_* tracking, and nothing else the issue did not name", () => {
+  expect(
+    clipIdentity(
+      "https://Example.TEST/path/?q=1&utm_source=news&utm_medium=email#frag",
+    ),
+  ).toBe(clipIdentity("https://example.test/path?q=1"));
+  expect(clipIdentity("https://example.test/a/")).toBe(
+    clipIdentity("https://example.test/a"),
+  );
+  for (const [left, right] of [
+    ["https://example.test/a?q=1", "https://example.test/a?q=2"],
+    ["https://example.test/a", "https://example.test/A"],
+    ["https://example.test/a", "http://example.test/a"],
+    ["https://example.test/a", "https://www.example.test/a"],
+    ["https://example.test/a", "https://example.test/b"],
+    ["https://example.test/a", "https://example.test/a?fbclid=z"],
+  ] as [string, string][])
+    expect(clipIdentity(left)).not.toBe(clipIdentity(right));
+});
+it("refuses a second clip that differs only by a trailing slash, utm_* tracking or fragment", async () => {
+  const { clips } = await open(),
+    saved = await act(clips, create),
+    item = saved.snapshot.clips.items[0]!;
+  // The stored and displayed URL keeps exactly what the user gave.
+  expect(item.originalUrl).toBe(create.url);
+  expect(item.canonicalUrl).toBe("https://example.test/path?q=1");
+  for (const url of [
+    "https://example.test/path/?q=1",
+    "https://example.test/path?q=1&utm_source=news&utm_medium=email",
+    "https://example.test/path/?q=1#other",
+    "https://EXAMPLE.test/path?q=1&utm_campaign=spring",
+  ]) {
+    const duplicate = await clips.prepare(await clips.read(), {
+      ...create,
+      url,
+    });
+    await expect(clips.commit(duplicate)).rejects.toBeInstanceOf(
+      ClipDuplicateError,
+    );
+  }
+  expect((await clips.read()).clips.items).toHaveLength(1);
+  for (const url of [
+    "https://example.test/path?q=2",
+    "https://example.test/path?q=1&page=2",
+    "https://example.test/path?q=1&fbclid=z",
+    "https://example.test/path/child",
+  ]) {
+    const distinct = await act(clips, { ...create, url });
+    expect(distinct.snapshot.clips.items.at(-1)!.originalUrl).toBe(url);
+  }
 });
 it("uses admission time for Undo after slow hashing, never resets it on replay, and refuses stale/expired undo", async () => {
   vi.useFakeTimers({ toFake: ["Date"] });

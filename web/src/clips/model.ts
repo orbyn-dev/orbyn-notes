@@ -1,6 +1,11 @@
 import { ClipDuplicateError, ClipError } from "./contracts";
 import type { ClipActionInput, ClipReceipt, ClipState } from "./contracts";
-import { CLIP_LIMITS, clipUrl, validateClipState } from "./validation";
+import {
+  CLIP_LIMITS,
+  clipIdentity,
+  clipUrl,
+  validateClipState,
+} from "./validation";
 
 export function applyClipAction(
   state: ClipState,
@@ -14,9 +19,10 @@ export function applyClipAction(
   let changed = true,
     resultRevision: number | null = null;
   if (action.kind === "create") {
-    const url = clipUrl(action.url);
+    const url = clipUrl(action.url),
+      identity = clipIdentity(action.url);
     const duplicate = next.items.find(
-      (item) => item.canonicalUrl === url.canonicalUrl,
+      (item) => clipIdentity(item.originalUrl) === identity,
     );
     if (!action.allowDuplicate && duplicate)
       throw new ClipDuplicateError(duplicate);
