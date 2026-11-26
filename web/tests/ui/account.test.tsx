@@ -30,6 +30,21 @@ describe("account views", () => {
     await screen.findByLabelText("Email");
     expect(account.checkInvite).toHaveBeenCalledWith("ABCD-1234-EFGH-5678");
   });
+  it("shows the invite hint that explains the disabled Continue", async () => {
+    render(<AccountView service={service()} onSession={vi.fn()} />);
+    fireEvent.click(screen.getByText("Create an account"));
+    const field = screen.getByLabelText("Invite code");
+    const hint = screen.getByText(
+      "Paste it with or without dashes or spaces. Upper or lower case both work.",
+    );
+    expect(screen.getByText("Continue")).toBeDisabled();
+    expect(field).toHaveAttribute("aria-describedby", hint.id);
+    expect(screen.getByText("Continue")).toHaveAttribute(
+      "aria-describedby",
+      hint.id,
+    );
+    expect(field).toHaveAttribute("placeholder", "XXXX-XXXX-XXXX-XXXX");
+  });
   it("retains credentials and shows a retryable sign-in failure", async () => {
     const account = service();
     vi.mocked(account.signIn).mockRejectedValue(
