@@ -140,7 +140,9 @@ export function TagsView({
     <section className="library-view tags-view" aria-label="Tags">
       <header className="page-heading tags-heading">
         <h1 ref={headingRef}>Tags</h1>
-        <span>{active.length} tags</span>
+        <span>
+          {active.length} {active.length === 1 ? "tag" : "tags"}
+        </span>
         <button
           className="primary"
           disabled={readOnly || action.busy || !!action.error}

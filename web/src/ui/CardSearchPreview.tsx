@@ -187,7 +187,7 @@ export function CardSearchPreview({
                   aria-live="polite"
                 >
                   {page.total === 0 ? "0" : `${page.start + 1}–${page.end}`} of{" "}
-                  {page.total} characters
+                  {page.total} {page.total === 1 ? "character" : "characters"}
                 </span>
                 <button
                   disabled={busy || paused || !page.previous}
