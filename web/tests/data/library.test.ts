@@ -17,6 +17,7 @@ import {
 } from "../../src/generated/wasm/orbyn_wasm.js";
 import { openNotesStore } from "../../src/data";
 import { establish, lock } from "../../src/account/session";
+import * as database from "../../src/data/database";
 import {
   mutateRecord,
   newWrappingKey,
@@ -721,6 +722,44 @@ describe("encrypted library metadata owner", () => {
     release();
     await expect(pending).rejects.toThrow("closed");
     expect(await ready(await open())).toEqual(before);
+  });
+  it("keeps the saving status until every overlapping write settles", async () => {
+    const store = await open(),
+      a = await store.create({ ...input, title: "First" }),
+      b = await store.create({ ...input, title: "Second" }),
+      write = database.mutateRecord;
+    let entries = 0,
+      releaseSecond!: () => void,
+      secondEntered!: () => void;
+    const gate = new Promise<void>((resolve) => {
+        releaseSecond = resolve;
+      }),
+      entered = new Promise<void>((resolve) => {
+        secondEntered = resolve;
+      });
+    vi.spyOn(database, "mutateRecord").mockImplementation(async (...args) => {
+      if (++entries === 2) {
+        secondEntered();
+        await gate;
+      }
+      return write(...args);
+    });
+    const first = store.update(a.id, { title: "First saved" }, a.revision),
+      second = store.update(b.id, { title: "Second saved" }, b.revision);
+    try {
+      await entered;
+      expect(store.persistence().status).toBe("saving");
+      await Promise.race([first, second]);
+      expect(store.persistence().status).toBe("saving");
+      releaseSecond();
+      await Promise.all([first, second]);
+    } finally {
+      releaseSecond();
+      await Promise.allSettled([first, second]);
+    }
+    expect(store.persistence().status).toBe("ready");
+    expect((await store.get(a.id))!.title).toBe("First saved");
+    expect((await store.get(b.id))!.title).toBe("Second saved");
   });
 });
 

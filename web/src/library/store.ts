@@ -15,6 +15,7 @@ import type {
 import { sameOwnerState, linkToken } from "../links/model";
 import {
   charge,
+  carriesNoteLink,
   inspectLinkDocument,
   scanLinkDocument,
   sameTargets,
@@ -134,6 +135,8 @@ type Context = {
   protectedVersion?: string;
   protectedReceipt?: string;
   collections?: CollectionsState;
+  // True only while the legacy certificate still covers this exact owner state.
+  legacyCertified: boolean;
   sourceWorkUnits?: number;
   sourceEdit?: {
     baseJSON: string;
@@ -184,6 +187,9 @@ export async function openNotesStore(
     } | null = null;
   let searchAdmission: ReturnType<typeof createSearchAdmission> | null = null;
   let state: PersistenceState = { status: "ready" };
+  let pendingWrites = 0;
+  // A failed wave stays failed until a later write succeeds or a new one starts.
+  let writeFailure: string | null = null;
   let channel: BroadcastChannel | null = null;
   const listeners = new Set<() => void>();
   const stopLock = onLock(close);
@@ -211,6 +217,14 @@ export async function openNotesStore(
           /* Observers do not control persistence outcomes. */
         }
       }
+  }
+  function publishPersistence() {
+    state = pendingWrites
+      ? { status: "saving" }
+      : writeFailure
+        ? { status: "failed", message: writeFailure }
+        : { status: "ready" };
+    notify();
   }
   let initial: DeviceRecord;
   try {
@@ -276,7 +290,9 @@ export async function openNotesStore(
     let result: T | undefined,
       resultingEpoch: string | null = null,
       wrote = false,
-      committed = false;
+      committed = false,
+      // This invocation's own slot in the overlapping-write count.
+      writePending = false;
     // Track explicit owner and validation rejections separately from storage failures.
     let rejectedChange: { error: unknown } | undefined;
     const rejectChange = (error: unknown): never => {
@@ -414,6 +430,7 @@ export async function openNotesStore(
             recordIdentity: { core: core.identity, library: envelope.identity },
             index,
             skipWrite: false,
+            legacyCertified: false,
             collections: options.collections
               ? readCollectionsForTransaction(engine)
               : undefined,
@@ -437,6 +454,11 @@ export async function openNotesStore(
                 )
               : null;
           const linkSnapshot = library ? ownerSnapshot(ctx) : null;
+          ctx.legacyCertified = Boolean(
+            legacyCertificate &&
+            linkSnapshot &&
+            sameOwnerState(legacyCertificate.snapshot, linkSnapshot),
+          );
           try {
             options.change?.(ctx);
           } catch (error) {
@@ -450,12 +472,7 @@ export async function openNotesStore(
             !options.erase
           ) {
             const work = { utf8Units: ctx.sourceWorkUnits ?? 0, nodeVisits: 0 };
-            if (
-              ctx.library.version === 2 &&
-              legacyCertificate &&
-              linkSnapshot &&
-              sameOwnerState(legacyCertificate.snapshot, linkSnapshot)
-            ) {
+            if (ctx.library.version === 2 && ctx.legacyCertified) {
               ctx.library = { ...ctx.library, version: 3, noteLinks: [] };
             }
             if (ctx.library.version === 3) {
@@ -623,8 +640,10 @@ export async function openNotesStore(
       }
       if (options.change || options.initialize) {
         if (options.change) {
-          state = { status: "saving" };
-          notify();
+          if (pendingWrites === 0) writeFailure = null;
+          pendingWrites++;
+          writePending = true;
+          publishPersistence();
         }
         await mutateRecord<DeviceRecord>(
           "devices",
@@ -641,9 +660,12 @@ export async function openNotesStore(
         await publishSearch();
         guard();
         if (options.change) {
-          state = { status: "ready" };
           if (wrote) channel?.postMessage("changed");
-          notify();
+          if (writePending) {
+            writePending = false;
+            pendingWrites--;
+          }
+          publishPersistence();
         }
       } else {
         const record = await readRecord<DeviceRecord>(
@@ -659,20 +681,21 @@ export async function openNotesStore(
     } catch (error) {
       if (options.change && !closed) {
         // A rejected change or a pre-commit cancellation did not write.
-        state =
+        const rejected =
           (rejectedChange && Object.is(rejectedChange.error, error)) ||
           (options.signal?.aborted &&
             error === options.signal.reason &&
-            !committed)
-            ? { status: "ready" }
-            : {
-                status: "failed",
-                message:
-                  error instanceof Error
-                    ? error.message
-                    : "The library could not be saved.",
-              };
-        notify();
+            !committed);
+        if (writePending) {
+          writePending = false;
+          pendingWrites--;
+        }
+        if (!rejected)
+          writeFailure =
+            error instanceof Error
+              ? error.message
+              : "The library could not be saved.";
+        publishPersistence();
       }
       throw error;
     } finally {
@@ -726,10 +749,20 @@ export async function openNotesStore(
       updatedAt: new Date().toISOString(),
     });
     checkedNote(ctx, id, expected, attempted);
-    validateNotes(
-      [attempted],
-      library.version === 3 || legacyCertificate ? "notes" : "plain",
-    );
+    const notesPolicy = library.version === 3 || ctx.legacyCertified;
+    if (notesPolicy) validateNotes([attempted], "notes");
+    else {
+      try {
+        validateNotes([attempted], "plain");
+      } catch (error) {
+        // A reference atom needs the "notes" codec. When the certificate that
+        // proved it is stale, the premise must be verified again rather than
+        // reporting a codec failure.
+        if (legacyCertificate && carriesNoteLink(attempted.document))
+          throw new NoteLinkError("note_link_migration_pending");
+        throw error;
+      }
+    }
     const proof = ctx.sourceEdit;
     const documentChanged = !sameDocument(attempted.document, current.document);
     if (
@@ -762,7 +795,7 @@ export async function openNotesStore(
           )
         : 0;
       const graphUnits =
-        documentChanged && (library.version === 3 || legacyCertificate)
+        documentChanged && (library.version === 3 || ctx.legacyCertified)
           ? (JSON.stringify(current.document).length +
               JSON.stringify(attempted.document).length) *
             6

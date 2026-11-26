@@ -164,6 +164,46 @@ it("keeps strict2 editing and refuses new atoms until complete legacy premise", 
     items: [{ sourceId: a.id, occurrences: 1, title: "Still editable" }],
   });
 });
+it("asks for a fresh premise instead of trusting a stale legacy certificate", async () => {
+  const { notes, links, a, b } = await setup();
+  await links.verifyGraph();
+  const other = await openNotesStore(identity);
+  handles.add(other);
+  await other.update(b.id, { title: "Written in another tab" }, b.revision);
+  const state = await noteLinkOwner(notes).read(),
+    edited = await notes.update(a.id, { title: "Still editable" }, a.revision);
+  expect(edited.title).toBe("Still editable");
+  expect((await noteLinkOwner(notes).read()).library.version).toBe(2);
+  const target = {
+    kind: "note",
+    accountId: identity.accountId,
+    libraryEpoch: state.library.epoch,
+    noteId: b.id,
+  };
+  expect(await links.admission()).toMatchObject({
+    mode: "legacy",
+    premise: "pending",
+  });
+  await expect(
+    notes.update(a.id, { document: linked(target) }, edited.revision),
+  ).rejects.toMatchObject({ code: "note_link_migration_pending" });
+  expect(await notes.get(a.id)).toEqual(edited);
+  expect((await noteLinkOwner(notes).read()).library.version).toBe(2);
+  // The owner reissues the premise for its new state; then the atom is admissible.
+  expect(await links.verifyGraph()).toMatchObject({ status: "ready" });
+  const reference = await links.reference(b.id);
+  await notes.update(
+    a.id,
+    { document: linked(reference.target) },
+    edited.revision,
+  );
+  expect((await noteLinkOwner(notes).read()).library.version).toBe(3);
+  await links.verifyGraph();
+  expect(await links.backlinks(b.id)).toMatchObject({
+    status: "ready",
+    items: [{ sourceId: a.id, title: "Still editable" }],
+  });
+});
 it("keeps persistence ready when a proposed link graph exceeds its aggregate limit", async () => {
   const { notes, links, a, b } = await setup();
   await links.verifyGraph();
