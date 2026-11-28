@@ -38,6 +38,7 @@ import {
   cancelLock,
   isLocking,
   onCompletedLock,
+  requireSession,
 } from "./session";
 import { solveSignupProof } from "./proof";
 export const subscribeLock = onCompletedLock;
@@ -69,12 +70,19 @@ const APPROVAL_ZONE = "notes-local-approval";
 const APPROVAL_RECORD = "verified-checkpoint";
 export type AccountServiceHandle = AccountService & {
   close(): void;
+  syncRequest<T>(
+    identity: AccountSession,
+    path: string,
+    body?: unknown,
+    method?: "GET" | "POST" | "PUT",
+  ): Promise<T>;
 };
-class AccountResponseError extends AccountError {
+export class AccountResponseError extends AccountError {
   constructor(
     code: string,
     message: string,
     readonly status: number,
+    readonly body?: unknown,
   ) {
     super(code, message);
   }
@@ -250,6 +258,7 @@ export function createAccountService(options?: {
           code,
           messages[code] ?? "The account request failed. Please retry.",
           response.status,
+          data,
         );
       }
       if (response.status === 204) return undefined as T;
@@ -636,6 +645,33 @@ export function createAccountService(options?: {
     return value;
   }
   return {
+    syncRequest: async <T>(
+      identity: AccountSession,
+      path: string,
+      body?: unknown,
+      method: "GET" | "POST" | "PUT" = "GET",
+    ): Promise<T> => {
+      requireSession(identity.accountId, identity.deviceId);
+      if (closed || busy || isLocking())
+        throw new AccountError(
+          "request_busy",
+          "Wait for the account operation to finish.",
+        );
+      // Keep the bearer private and restrict this transport to sync endpoints.
+      if (
+        !/^\/v1\/(devices|keychain\/envelopes|zones(?:\/[A-Za-z0-9%:_-]+(?:\/changes)?)?)(?:\?[A-Za-z0-9%=_&.-]*)?$/.test(
+          path,
+        )
+      )
+        throw new AccountError("invalid_request", "Unsupported sync endpoint.");
+      const before = lockVersion();
+      operationEpoch = epoch;
+      const result = await request<T>(path, body, method, true);
+      requireSession(identity.accountId, identity.deviceId);
+      if (before !== lockVersion())
+        throw new AccountError("cancelled", "The account changed during sync.");
+      return result;
+    },
     // The owner releases the service when it stops driving this attempt.
     close: () => {
       if (closed) return;

@@ -14,6 +14,7 @@ import { useIncomingNoteLink } from "./links/useIncomingNoteLink";
 import { IncomingNoteLink } from "./ui/noteLinks/IncomingNoteLink";
 import { localModeSelected, openLocalSession, selectLocalMode } from "./data/local";
 import { lock } from "./account/session";
+import { EcosystemProvider } from "./sync/Provider";
 import { isQuickWindow, requireQuickClosed, setCaptureScope } from "./desktop/capture";
 const QuickNoteWindow = lazy(() => import("./ui/QuickNoteWindow").then(module => ({ default: module.QuickNoteWindow })));
 const QuickNoteLocked = lazy(() => import("./ui/QuickNoteWindow").then(module => ({ default: module.QuickNoteLocked })));
@@ -34,7 +35,7 @@ export function App() {
 }
 function AppContent({ quick = false, onUseWithoutAccount }: { quick?: boolean; onUseWithoutAccount?: () => void }) {
   usePreferences();
-  const [service, setService] = useState<AccountService | null>(null);
+  const [service, setService] = useState<AccountServiceHandle | null>(null);
   const [session, setSession] = useState<AccountSession | null>(null);
   const [store, setStore] = useState<NotesLibraryStore | null>(null);
   const [loading, setLoading] = useState(true);
@@ -65,10 +66,10 @@ function AppContent({ quick = false, onUseWithoutAccount }: { quick?: boolean; o
     try {
       created = local ? null : createAccountService();
       const account = created && isDesktop()
-        ? protectOperations(created, Object.keys(created))
+        ? protectOperations(created, Object.keys(created).filter(key => key !== "syncRequest"))
         : created;
       setService(account);
-      void (local ? openLocalSession(() => active) : account!.current())
+      void (local ? openLocalSession(() => active) : new URLSearchParams(location.search).get("connect") === "1" ? Promise.resolve(null) : account!.current())
         .then((s) => {
           if (active) {
             setSession(s);
@@ -255,7 +256,7 @@ function AppContent({ quick = false, onUseWithoutAccount }: { quick?: boolean; o
     );
   if (!store) return publicNotice;
   if (quick) return <QuickNoteWindow key={session.accountId} store={store} />;
-  return (
+  const workspace = (
     <div className="notes-entry-layout">
       {incomingNotice}
       {actionError && <p role="alert" className="banner">{actionError}</p>}
@@ -276,6 +277,9 @@ function AppContent({ quick = false, onUseWithoutAccount }: { quick?: boolean; o
       </Suspense>
     </div>
   );
+  return import.meta.env.VITE_ECOSYSTEM_SYNC === "1" && !local && service
+    ? <EcosystemProvider store={store} service={service} identity={session}>{workspace}</EcosystemProvider>
+    : workspace;
 }
 function Loading() {
   const [show, setShow] = useState(false);

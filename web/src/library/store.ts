@@ -1,4 +1,5 @@
 import { SearchSourceError } from "../search/contracts";
+import { journalChanges, projected, readIndex, syncOwners } from "../sync/model";
 import {
   createSearchAdmission,
   notesSearchData,
@@ -264,6 +265,7 @@ export async function openNotesStore(
     repair?: boolean;
     beforeStage?: () => void;
     signal?: AbortSignal;
+    sync?: { run: (engine: SyncEngine) => unknown; materialize: boolean; readOnly: boolean };
   }): Promise<T> {
     // Immutable invocation fence: adopting an erase result must not admit queued old work.
     const operationEpoch = handleEpoch,
@@ -276,7 +278,8 @@ export async function openNotesStore(
     let result: T | undefined,
       resultingEpoch: string | null = null,
       wrote = false,
-      committed = false;
+      committed = false,
+      libraryChanged = false;
     // Track explicit owner and validation rejections separately from storage failures.
     let rejectedChange: { error: unknown } | undefined;
     const rejectChange = (error: unknown): never => {
@@ -418,6 +421,9 @@ export async function openNotesStore(
               ? readCollectionsForTransaction(engine)
               : undefined,
           };
+          const syncBase = options.change && !options.sync && readIndex(engine).enabled ? structuredClone(ctx.notes) : null;
+          if (options.erase && readIndex(engine).enabled)
+            rejectChange(new Error("Sign out before erasing a library enrolled in the sync test."));
           const annotationBases =
             options.change && library?.anchors.length
               ? new Map(
@@ -438,6 +444,25 @@ export async function openNotesStore(
               : null;
           const linkSnapshot = library ? ownerSnapshot(ctx) : null;
           try {
+            if (options.sync) {
+              options.sync.run(engine);
+              wrote = !options.sync.readOnly;
+              ctx.skipWrite = true;
+              if (options.sync.materialize) {
+                if (!ctx.library) throw new LibraryReadOnlyError();
+                for (const remote of projected(engine)) {
+                  const existing = ctx.notes.find(note => note.id === remote.id);
+                  // Revisions are local CAS fences, never imported from another device.
+                  if (existing && JSON.stringify({ ...existing, revision: 0 }) === JSON.stringify({ ...remote, revision: 0 })) continue;
+                  const next = { ...remote, revision: (existing?.revision ?? 0) + 1 };
+                  if (!Number.isSafeInteger(next.revision)) throw new Error("Note revision exhausted.");
+                  if (existing) ctx.notes[ctx.notes.indexOf(existing)] = next;
+                  else ctx.notes.push(next);
+                  syncMembership(ctx.library, next, new Date().toISOString());
+                  ctx.skipWrite = false;
+                }
+              }
+            }
             options.change?.(ctx);
           } catch (error) {
             rejectChange(error);
@@ -551,6 +576,9 @@ export async function openNotesStore(
           options.signal?.throwIfAborted();
           options.beforeStage?.();
           const changed = Boolean(options.change && !ctx.skipWrite);
+          libraryChanged ||= changed;
+          // The local note and encrypted sync event commit in one IDB transaction.
+          if (changed && syncBase) journalChanges(engine, syncBase, ctx.notes);
           if (changed && !ctx.library) rejectChange(new LibraryReadOnlyError());
           // Capture the old collections revision while its authenticated owner
           // still exists. Purge and all fresh-key replacements share this IDB put.
@@ -621,8 +649,8 @@ export async function openNotesStore(
           keys.free();
         }
       }
-      if (options.change || options.initialize) {
-        if (options.change) {
+      if (options.change || options.initialize || options.sync && !options.sync.readOnly) {
+        if (options.change && !options.sync) {
           state = { status: "saving" };
           notify();
         }
@@ -641,9 +669,9 @@ export async function openNotesStore(
         await publishSearch();
         guard();
         if (options.change) {
-          state = { status: "ready" };
-          if (wrote) channel?.postMessage("changed");
-          notify();
+          if (!options.sync) state = { status: "ready" };
+          if (wrote && (!options.sync || libraryChanged)) channel?.postMessage("changed");
+          if (!options.sync || libraryChanged) notify();
         }
       } else {
         const record = await readRecord<DeviceRecord>(
@@ -657,7 +685,7 @@ export async function openNotesStore(
       guard();
       return result as T;
     } catch (error) {
-      if (options.change && !closed) {
+      if (options.change && !options.sync && !closed) {
         // A rejected change or a pre-commit cancellation did not write.
         state =
           (rejectedChange && Object.is(rejectedChange.error, error)) ||
@@ -1510,6 +1538,16 @@ export async function openNotesStore(
     persistence: () => ({ ...state }),
     close,
   };
+  syncOwners.set(store, async (run, materialize = false, readOnly = false) => {
+    if (materialize && readOnly) throw new Error("A read cannot materialize synced notes.");
+    let value: unknown;
+    await access({
+      change: materialize ? () => {} : undefined,
+      sync: { run: engine => { value = run(engine); }, materialize, readOnly },
+      project: () => null,
+    });
+    return value as never;
+  });
   function ownerSnapshot(ctx: Context): LinkOwnerSnapshot {
     return {
       accountId: identity.accountId,

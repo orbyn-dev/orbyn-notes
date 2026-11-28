@@ -8,6 +8,30 @@ Rules that change go in this file with the change.
 
 ## Single-browser web beta
 
+### Opt-in ecosystem sync test
+
+`VITE_ECOSYSTEM_SYNC=1` enables the development-only, trusted-account integration
+described in [the local sync test contract](../web/docs/ecosystem-sync-test.md).
+It is disabled by default and never enrolls an account-free workspace. Notes and
+Planner use the same configured Engine account with separate approved devices,
+keys and local databases. This does not replace the installed desktop builds.
+
+The library writer atomically stages immutable per-note edit events with local
+changes. Only this device's `notes-sync:<device UUID>` and
+`notes-links:<device UUID>` zones are uploaded; local library, collections,
+history and approval zones stay local. Causal branches preserve concurrent edits
+as separate notes. Remote materialization uses local revision fences, and failed
+commits retain drafts. Reads do not advance the persisted engine generation.
+
+Notes reads Planner task records without writing task content. Planner reads
+encrypted relationship references and a cached note title, and skips note-body
+zones. Account-bound links use configured app destinations, never remote URLs.
+The stream is append-only and bounded; erase is blocked while enrolled. Device
+removal pauses this test instead of continuing under keys a removed device held.
+Production key rotation, stream compaction, unlinking and automatic backlink-title
+refresh remain deferred. Bearer tokens remain in memory; local grants still allow
+offline reopening, and signing in again resumes network sync.
+
 `web/` contains the React/Vite/TypeScript application. The UI consumes the
 `NotesStore`, account and Markdown-transfer interfaces in `src/domain/contracts.ts`,
 plus the library and collections interfaces in their owning modules.
@@ -25,7 +49,8 @@ Authentication uses real OPAQUE and engine device keys; fixtures are test-only.
 New accounts use the engine's existing invite and email-verification protocol.
 Existing accounts use its sign-in, second-factor and pending-device protocol.
 
-There are no Notes uploads in this beta. One account's whole local library is
+There are no Notes uploads in the default beta build. The opt-in ecosystem test
+above is a separate development configuration. One account's whole local library is
 held in an engine snapshot sealed with its device keys. IndexedDB holds the sealed
 keys and snapshot with a non-extractable WebCrypto HMAC key used to derive the
 wrapping secret. Plaintext notes and persistent bearer tokens are not stored in
