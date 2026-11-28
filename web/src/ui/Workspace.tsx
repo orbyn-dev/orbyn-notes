@@ -3309,7 +3309,7 @@ export function Workspace({
             This permanently removes this account’s notes and Trash, tags, pins
             and version history, Study decks, cards and reviews, saved Clips,
             and protected Journal entries, habits and recovery drafts from this
-            device. There is no synced copy. This can’t be undone. Your account
+            device. {ecosystem ? "Copies already uploaded to your account remain there. Permanent erase is unavailable in this sync test. " : "There is no synced copy. "}This can’t be undone. Your account
             stays signed in.
           </p>
           <p>
@@ -3377,6 +3377,7 @@ export function Workspace({
             </label>
             <button
               disabled={
+                ecosystem ||
                 busy ||
                 libraryAction.busy ||
                 !!libraryAction.error ||

@@ -83,6 +83,7 @@ export class EcosystemSync {
   private readonly transaction: SyncTransaction;
   private closed = false;
   private started = false;
+  private linkRevision = 0;
   private timer: ReturnType<typeof setTimeout> | undefined;
   private running: Promise<void> | null = null;
   private listeners = new Set<() => void>();
@@ -246,8 +247,12 @@ export class EcosystemSync {
   }
   private async cycle() {
     this.publish({ status: "Syncing", error: null });
+    const cachedRevision = this.linkRevision;
     const cached = await this.localView();
-    this.publish({ tasks: cached.tasks, links: cached.links });
+    this.publish({
+      tasks: cached.tasks,
+      ...(cachedRevision === this.linkRevision ? { links: cached.links } : {}),
+    });
     const devices = await this.request<DeviceList>("/v1/devices");
     await this.run((engine) => {
       const verified = JSON.parse(
@@ -437,10 +442,11 @@ export class EcosystemSync {
           throw new Error("More local changes are waiting to sync.");
       }
     }
+    const completedRevision = this.linkRevision;
     const data = await this.localView(true);
     this.publish({
       tasks: data.tasks,
-      links: data.links,
+      ...(completedRevision === this.linkRevision ? { links: data.links } : {}),
       status: data.waiting ? "Waiting for device keys" : "Synced",
       error: null,
       syncedAt: new Date().toISOString(),
@@ -537,6 +543,7 @@ export class EcosystemSync {
       false,
       true,
     );
+    this.linkRevision++;
     this.publish({
       links: [
         ...this.snapshot.links.filter(

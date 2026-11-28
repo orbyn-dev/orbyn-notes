@@ -22,6 +22,7 @@ import { TagsView } from "../../src/ui/TagsView";
 import { VersionHistory } from "../../src/ui/VersionHistory";
 import { NoteEditor } from "../../src/ui/NoteEditor";
 import { Workspace } from "../../src/ui/Workspace";
+import { EcosystemContextForTests } from "../../src/sync/Provider";
 vi.mock("../../src/ui/RichEditor", () => ({
   RichEditor: ({
     readOnly,
@@ -138,21 +139,58 @@ function store(): NotesStore {
     close: vi.fn(),
   };
 }
-function workspace(api: NotesLibrary) {
+function workspace(api: NotesLibrary, synced = false) {
+  const snapshot = {
+    status: "Synced",
+    error: null,
+    tasks: [],
+    links: [],
+    syncedAt: "2026-11-28T00:00:00Z",
+  };
+  const controller = {
+    getSnapshot: () => snapshot,
+    subscribe: () => () => {},
+    syncNow: async () => {},
+    link: async () => {},
+  };
   return render(
-    <Workspace
-      library={api}
-      store={store()}
-      session={{
-        accountId: "synthetic",
-        deviceId: "synthetic",
-        deviceState: "trusted",
-        email: "library-fixture@example.test",
-      }}
-      onSignOut={vi.fn()}
-    />,
+    <EcosystemContextForTests.Provider value={synced ? controller : null}>
+      <Workspace
+        library={api}
+        store={store()}
+        session={{
+          accountId: "synthetic",
+          deviceId: "synthetic",
+          deviceState: "trusted",
+          email: "library-fixture@example.test",
+        }}
+        onSignOut={vi.fn()}
+      />
+    </EcosystemContextForTests.Provider>,
   );
 }
+
+it("explains retained synced copies and blocks permanent erase in the sync test", async () => {
+  const api = library();
+  workspace(api, true);
+  await screen.findByRole("heading", { name: "All notes" });
+  fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+  fireEvent.click(screen.getByRole("button", { name: "Data and export" }));
+  fireEvent.click(screen.getByRole("button", { name: "Erase this browser" }));
+  const dialog = screen.getByRole("dialog", {
+    name: "Erase notes from this browser?",
+  });
+  expect(dialog).not.toHaveTextContent("There is no synced copy");
+  expect(dialog).toHaveTextContent(
+    "Copies already uploaded to your account remain there",
+  );
+  fireEvent.change(within(dialog).getByLabelText("Type ERASE to confirm"), {
+    target: { value: "ERASE" },
+  });
+  expect(
+    within(dialog).getByRole("button", { name: "Erase notes" }),
+  ).toBeDisabled();
+});
 describe("library mutation recovery", () => {
   it("reuses an immutable operation ID only after explicit reload", async () => {
     const effect = vi

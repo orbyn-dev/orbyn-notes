@@ -132,6 +132,63 @@ async function cachedTask() {
   return { store, transaction, note, task, controller };
 }
 describe("real engine sync persistence", () => {
+  it("does not hide a committed link when an older cached read finishes late", async () => {
+    const cached = await cachedTask();
+    cached.controller.close();
+    const original = cached.transaction;
+    let delayRead = false;
+    let started!: () => void, release!: () => void;
+    const reading = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    syncOwners.set(
+      cached.store,
+      async (run, materialize, readOnly, requireWritable) => {
+        const result = await original(
+          run,
+          materialize,
+          readOnly,
+          requireWritable,
+        );
+        if (readOnly && delayRead) {
+          delayRead = false;
+          started();
+          await held;
+        }
+        return result;
+      },
+    );
+    const controller = new EcosystemSync(
+      cached.store,
+      {
+        syncRequest: async () => {
+          throw new Error("Engine offline");
+        },
+      },
+      identity,
+    );
+    try {
+      await controller.syncNow();
+      delayRead = true;
+      const pass = controller.syncNow();
+      await reading;
+      const linking = controller.link(cached.note.id, cached.task);
+      await vi.waitFor(() =>
+        expect(controller.getSnapshot().links).toHaveLength(1),
+      );
+      release();
+      await Promise.all([pass, linking]);
+      expect(controller.getSnapshot().links).toHaveLength(1);
+      expect(controller.getSnapshot().error).toContain("Engine offline");
+    } finally {
+      release();
+      controller.close();
+      cached.store.close();
+    }
+  });
   it("rejects a relationship write from an old library epoch", async () => {
     const { store, transaction, note, task, controller } = await cachedTask();
     try {
