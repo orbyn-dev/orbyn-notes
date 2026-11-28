@@ -1,3 +1,4 @@
+import { PlannerLinks, useEcosystemEnabled } from "../sync/Provider";
 import { useEffect, useRef, useState } from "react";
 import {
   BookOpen,
@@ -145,6 +146,7 @@ export function NewNote({
     error: "",
     copied: false,
   });
+  const ecosystem = useEcosystemEnabled();
   const writer = useRef<CaptureWriter | null>(null);
   if (!writer.current)
     writer.current = new CaptureWriter(store, initialTags, setState, (note) =>
@@ -381,12 +383,13 @@ export function NewNote({
           >
             <span
               className="new-note-pill"
-              title="Planner links are not available in this beta"
+              title={ecosystem ? "Link saved notes to existing Planner tasks" : "Planner links are not available in this beta"}
             >
-              Link a task · Planned
+              {ecosystem ? state.note ? "Tasks · Planner" : "Save this note to link a task" : "Link a task · Planned"}
             </span>
           </CompactNoteTags>
         )}
+        {!quick && state.note && ecosystem && <PlannerLinks noteId={state.note.id} />}
         {quick && tagOpen && (
           <form
             className="capture-tag-form"

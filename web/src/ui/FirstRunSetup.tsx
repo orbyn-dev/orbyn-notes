@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Check } from "./icons";
 import { Dialog } from "./primitives";
 import { isLocalSession } from "../data/local";
+import { useEcosystemEnabled } from "../sync/Provider";
 import "../styles/setup.css";
 export type SetupImportState =
   | "idle"
@@ -36,6 +37,7 @@ export function FirstRunSetup({
   onClose: () => void;
 }) {
   const [step, setStep] = useState<"import" | "sync">("import");
+  const ecosystem = useEcosystemEnabled();
   const busy =
     ["picking", "reading", "review", "running"].includes(importState) ||
     remainingCount > 0;
@@ -123,14 +125,14 @@ export function FirstRunSetup({
         <div>
           <b>Sync your devices</b>
           <small>
-            Sync isn’t available in this beta. Your notes stay{" "}
+            {ecosystem ? "Account sync is enabled for this test. Encrypted local copies remain " : "Sync isn’t available in this beta. Your notes stay "}
             {environment === "desktop"
               ? "in this app on this device"
               : "in this browser profile"}
             .
           </small>
         </div>
-        <span className="setup-status">Planned</span>
+        <span className="setup-status">{ecosystem ? "Test build" : "Planned"}</span>
         {step === "sync" && (
           <button disabled={busy} onClick={onComplete}>
             Skip

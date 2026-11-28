@@ -47,6 +47,22 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllGlobals());
 
+it.each([["", true], ["1", false]] as const)("limits explicit reconnect to the opt-in build (flag=%s)", async (flag, restoresGrant) => {
+  vi.stubEnv("VITE_ECOSYSTEM_SYNC", flag);
+  const previous = location.href;
+  history.replaceState(null, "", "/?connect=1");
+  fixture.current.mockResolvedValue(null);
+  try {
+    render(<App />);
+    expect(await screen.findByRole("button", { name: "Sign in" })).toBeVisible();
+    if (restoresGrant) expect(fixture.current).toHaveBeenCalledOnce();
+    else expect(fixture.current).not.toHaveBeenCalled();
+  } finally {
+    history.replaceState(null, "", previous);
+    vi.unstubAllEnvs();
+  }
+});
+
 it("allows password sign-in after rejecting an invalid local grant, without opening Notes", async () => {
   fixture.current.mockRejectedValue(
     new AccountError(

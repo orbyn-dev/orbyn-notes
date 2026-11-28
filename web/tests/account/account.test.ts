@@ -278,3 +278,68 @@ it.each(["devices", "access"])(
     expect(await readRecord("signups", "fixture-signup")).toBeUndefined();
   },
 );
+describe("session-bound sync transport", () => {
+  async function ready() {
+    await signup();
+    const fetch = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify(response), { status: 200 }),
+      );
+    vi.stubGlobal("fetch", fetch);
+    const service = createAccountService({ engineUrl: base });
+    const identity = await service.verifyEmail({
+      signupId: "fixture-signup",
+      code: "FIXTURE",
+    });
+    fetch.mockReset();
+    return { service, identity, fetch };
+  }
+  it("rejects another account and non-sync endpoints before making a request", async () => {
+    const { service, identity, fetch } = await ready();
+    await expect(
+      service.syncRequest(
+        { ...identity, accountId: identity.deviceId },
+        "/v1/devices",
+      ),
+    ).rejects.toMatchObject({ code: "locked" });
+    await expect(
+      service.syncRequest(identity, "/v1/accounts/delete"),
+    ).rejects.toMatchObject({ code: "invalid_request" });
+    expect(fetch).not.toHaveBeenCalled();
+    service.close();
+  });
+  it("rejects an in-flight response after locking the account", async () => {
+    const { service, identity, fetch } = await ready();
+    let complete!: (response: Response) => void;
+    fetch.mockImplementation(
+      () =>
+        new Promise<Response>((resolve) => {
+          complete = resolve;
+        }),
+    );
+    const pending = service.syncRequest(identity, "/v1/devices");
+    const rejected = expect(pending).rejects.toMatchObject({
+      code: "cancelled",
+    });
+    lock();
+    complete(
+      new Response(JSON.stringify({ devices: [], removals: [] }), {
+        status: 200,
+      }),
+    );
+    await rejected;
+    service.close();
+  });
+  it("preserves a conflict response for the engine's checked retry", async () => {
+    const { service, identity, fetch } = await ready();
+    const body = { code: "record_changed", conflicts: [] };
+    fetch.mockResolvedValue(
+      new Response(JSON.stringify(body), { status: 409 }),
+    );
+    await expect(
+      service.syncRequest(identity, "/v1/zones/test/changes", {}, "POST"),
+    ).rejects.toMatchObject({ status: 409, body });
+    service.close();
+  });
+});

@@ -56,6 +56,7 @@ import { encodeNoteReference } from "../links/reference";
 import type { NoteLinkCopyFormatter } from "../links/navigation";
 import { NoteLinkError } from "../links/contracts";
 import { CompactNoteTags } from "./CompactNoteTags";
+import { PlannerLinks } from "../sync/Provider";
 // design: notes/note-menu
 export function NoteEditor({
   note,
@@ -952,6 +953,7 @@ export function NoteEditor({
             })}
           </time>
         </CompactNoteTags>
+        <PlannerLinks noteId={note.id} readOnly={readOnly} />
         <RichEditor
           toolbarTarget={formattingTarget}
           active={active}

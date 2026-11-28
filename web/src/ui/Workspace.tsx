@@ -24,6 +24,7 @@ import {
 } from "./icons";
 import type { AccountSession, Note, NotesStore } from "../domain/contracts";
 import { storageCopy } from "./storageCopy";
+import { useEcosystemEnabled } from "../sync/Provider";
 import { prepareMarkdownImport, runMarkdownImport, MarkdownImportFailure, type MarkdownImportPlan } from "./markdownImport";
 import { readMarkdownFiles } from "../transfer/readFiles";
 import { projectNotes, plainText, message } from "./model";
@@ -187,6 +188,7 @@ export function Workspace({
   const createInFlight = useRef<number | null>(null);
   const createFocusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const localSession = isLocalSession(session);
+  const ecosystem = useEcosystemEnabled();
   const accountLabel = localSession ? "Local workspace" : session.email;
   const accountInitial = useMemo(() => {
     const first = new Intl.Segmenter(undefined, { granularity: "grapheme" })
@@ -1997,7 +1999,7 @@ export function Workspace({
           <Menu size={18} />
         </button>
         <b>Orbyn Notes</b>
-        <span>Beta · Local only</span>
+        <span>{ecosystem ? "Beta · Account sync test" : "Beta · Local only"}</span>
       </header>
       {drawer && (
         <button
@@ -2265,8 +2267,8 @@ export function Workspace({
           </button>
         </nav>
         <footer>
-          <p title={storageCopy(!!desktop).encryptedHelp}>
-            ◉ Beta · Local only
+          <p title={ecosystem ? "Account sync is enabled for this test. Export a copy before clearing local app data." : storageCopy(!!desktop).encryptedHelp}>
+            ◉ {ecosystem ? "Beta · Account sync test" : "Beta · Local only"}
           </p>
           <button
             className="nav"
@@ -2816,8 +2818,8 @@ export function Workspace({
                           </button>
                         </div>
                         <p className="library-local-copy">
-                          This beta doesn’t sync or back up notes. Export a copy
-                          before clearing{" "}
+                          {ecosystem ? "Notes sync is enabled for this test account. Export a copy" : "This beta doesn’t sync or back up notes. Export a copy"}
+                          {" "}before clearing{" "}
                           {desktop ? "app data" : "this browser’s data"}.
                         </p>
                       </>
@@ -3307,7 +3309,7 @@ export function Workspace({
             This permanently removes this account’s notes and Trash, tags, pins
             and version history, Study decks, cards and reviews, saved Clips,
             and protected Journal entries, habits and recovery drafts from this
-            device. There is no synced copy. This can’t be undone. Your account
+            device. {ecosystem ? "Copies already uploaded to your account remain there. Permanent erase is unavailable in this sync test. " : "There is no synced copy. "}This can’t be undone. Your account
             stays signed in.
           </p>
           <p>
@@ -3375,6 +3377,7 @@ export function Workspace({
             </label>
             <button
               disabled={
+                ecosystem ||
                 busy ||
                 libraryAction.busy ||
                 !!libraryAction.error ||
