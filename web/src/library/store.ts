@@ -265,14 +265,14 @@ export async function openNotesStore(
     repair?: boolean;
     beforeStage?: () => void;
     signal?: AbortSignal;
-    sync?: { run: (engine: SyncEngine) => unknown; materialize: boolean; readOnly: boolean };
+    sync?: { run: (engine: SyncEngine) => unknown; materialize: boolean; readOnly: boolean; requireWritable: boolean };
   }): Promise<T> {
     // Immutable invocation fence: adopting an erase result must not admit queued old work.
     const operationEpoch = handleEpoch,
       operationLockVersion = lockVersion();
     assertOpen();
     options.signal?.throwIfAborted();
-    if (options.change && legacyReadOnly && !options.legacyErase)
+    if ((options.change || options.sync?.requireWritable) && legacyReadOnly && !options.legacyErase)
       throw new LibraryReadOnlyError();
     const secret = await wrappingSecret(initial.wrapKey);
     let result: T | undefined,
@@ -369,7 +369,7 @@ export async function openNotesStore(
             else recoveryCommon = common;
           }
           if (
-            options.change &&
+            (options.change || options.sync?.requireWritable) &&
             !options.repair &&
             !options.erase &&
             common &&
@@ -402,7 +402,7 @@ export async function openNotesStore(
               "library_missing: Reopen the library before retrying.",
             );
           if (
-            options.change &&
+            (options.change || options.sync?.requireWritable) &&
             (library ?? recoveryCommon) &&
             operationEpoch !== (library ?? recoveryCommon)!.epoch
           )
@@ -445,6 +445,7 @@ export async function openNotesStore(
           const linkSnapshot = library ? ownerSnapshot(ctx) : null;
           try {
             if (options.sync) {
+              if (options.sync.requireWritable && !ctx.library) throw new LibraryReadOnlyError();
               options.sync.run(engine);
               wrote = !options.sync.readOnly;
               ctx.skipWrite = true;
@@ -456,6 +457,10 @@ export async function openNotesStore(
                   if (existing && JSON.stringify({ ...existing, revision: 0 }) === JSON.stringify({ ...remote, revision: 0 })) continue;
                   const next = { ...remote, revision: (existing?.revision ?? 0) + 1 };
                   if (!Number.isSafeInteger(next.revision)) throw new Error("Note revision exhausted.");
+                  // The existing v2 library was fully read under the plain
+                  // document policy. Promote it before admitting remote references;
+                  // the normal mutation path below builds and validates the v3 index.
+                  if (ctx.library.version === 2) ctx.library = { ...ctx.library, version: 3, noteLinks: [] };
                   if (existing) ctx.notes[ctx.notes.indexOf(existing)] = next;
                   else ctx.notes.push(next);
                   syncMembership(ctx.library, next, new Date().toISOString());
@@ -1538,12 +1543,12 @@ export async function openNotesStore(
     persistence: () => ({ ...state }),
     close,
   };
-  syncOwners.set(store, async (run, materialize = false, readOnly = false) => {
+  syncOwners.set(store, async (run, materialize = false, readOnly = false, requireWritable = false) => {
     if (materialize && readOnly) throw new Error("A read cannot materialize synced notes.");
     let value: unknown;
     await access({
       change: materialize ? () => {} : undefined,
-      sync: { run: engine => { value = run(engine); }, materialize, readOnly },
+      sync: { run: engine => { value = run(engine); }, materialize, readOnly, requireWritable },
       project: () => null,
     });
     return value as never;

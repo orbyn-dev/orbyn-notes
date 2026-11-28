@@ -37,7 +37,8 @@ function AppContent({ quick = false, onUseWithoutAccount }: { quick?: boolean; o
   usePreferences();
   const [service, setService] = useState<AccountServiceHandle | null>(null);
   const [session, setSession] = useState<AccountSession | null>(null);
-  const [store, setStore] = useState<NotesLibraryStore | null>(null);
+  const [storeHandles, setStoreHandles] = useState<{ workspace: NotesLibraryStore; sync: NotesLibraryStore } | null>(null);
+  const store = storeHandles?.workspace ?? null;
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [actionError, setActionError] = useState("");
@@ -53,7 +54,7 @@ function AppContent({ quick = false, onUseWithoutAccount }: { quick?: boolean; o
         // initial URL intent until the first session; revoke an active one.
         if (activeSession.current) incoming.revoke();
         setSession(null);
-        setStore(null);
+        setStoreHandles(null);
         setError("");
       }),
     [incoming.revoke],
@@ -114,8 +115,9 @@ function AppContent({ quick = false, onUseWithoutAccount }: { quick?: boolean; o
       .then((s) => {
         opened = s;
         if (active)
-          setStore(
-            isDesktop()
+          setStoreHandles({
+            sync: s,
+            workspace: isDesktop()
               ? protectOperations(s, [
                   "create",
                   "update",
@@ -124,7 +126,7 @@ function AppContent({ quick = false, onUseWithoutAccount }: { quick?: boolean; o
                   "erase",
                 ])
               : s,
-          );
+          });
         else s.close();
       })
       .catch(() => {
@@ -139,7 +141,7 @@ function AppContent({ quick = false, onUseWithoutAccount }: { quick?: boolean; o
     return () => {
       active = false;
       opened?.close();
-      setStore(null);
+      setStoreHandles(null);
     };
   }, [session, attempt]);
   useEffect(() => {
@@ -158,7 +160,7 @@ function AppContent({ quick = false, onUseWithoutAccount }: { quick?: boolean; o
       } else await service?.signOut();
       incoming.revoke();
       store?.close();
-      setStore(null);
+      setStoreHandles(null);
       setSession(null);
       setError("");
     } catch (error) {
@@ -175,7 +177,7 @@ function AppContent({ quick = false, onUseWithoutAccount }: { quick?: boolean; o
     setActionError("");
     incoming.revoke();
     store?.close();
-    setStore(null);
+    setStoreHandles(null);
     setSession(null);
     setError("");
     selectLocalMode(true);
@@ -279,7 +281,7 @@ function AppContent({ quick = false, onUseWithoutAccount }: { quick?: boolean; o
     </div>
   );
   return import.meta.env.VITE_ECOSYSTEM_SYNC === "1" && !local && service
-    ? <EcosystemProvider store={store} service={service} identity={session}>{workspace}</EcosystemProvider>
+    ? <EcosystemProvider store={storeHandles?.sync ?? store} service={service} identity={session}>{workspace}</EcosystemProvider>
     : workspace;
 }
 function Loading() {

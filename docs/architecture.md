@@ -32,6 +32,15 @@ Production key rotation, stream compaction, unlinking and automatic backlink-tit
 refresh remain deferred. Bearer tokens remain in memory; local grants still allow
 offline reopening, and signing in again resumes network sync.
 
+Desktop workspace operations retain their close-guard proxy while sync uses the
+original registered store identity. Incoming references can promote a validated
+v2 library to v3 in the same transaction that materializes the note and builds its
+reference index. Relationship writes share the library's read-only and epoch
+fences. Offline relationship retries reuse the committed ID and show the local
+chip before upload; network status remains separate. Deleted Planner zones clear
+pending key state. Sign-in preserves pending backlink targets and configured app
+subpaths; a missing note is reported after a completed pass and retried later.
+
 `web/` contains the React/Vite/TypeScript application. The UI consumes the
 `NotesStore`, account and Markdown-transfer interfaces in `src/domain/contracts.ts`,
 plus the library and collections interfaces in their owning modules.

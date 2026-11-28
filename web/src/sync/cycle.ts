@@ -95,7 +95,7 @@ export class EcosystemSync {
   };
   constructor(
     private store: NotesLibraryStore,
-    private account: AccountServiceHandle,
+    private account: Pick<AccountServiceHandle, "syncRequest">,
     private identity: AccountSession,
   ) {
     const transaction = syncOwners.get(store);
@@ -138,12 +138,21 @@ export class EcosystemSync {
     this.guard();
     return value;
   };
-  private run = <T>(fn: (engine: SyncEngine) => T, materialize = false) => {
+  private run = <T>(
+    fn: (engine: SyncEngine) => T,
+    materialize = false,
+    requireWritable = false,
+  ) => {
     this.guard();
-    return this.transaction((engine) => {
-      this.guard();
-      return fn(engine);
-    }, materialize);
+    return this.transaction(
+      (engine) => {
+        this.guard();
+        return fn(engine);
+      },
+      materialize,
+      false,
+      requireWritable,
+    );
   };
   private read = <T>(fn: (engine: SyncEngine) => T) => {
     this.guard();
@@ -237,6 +246,8 @@ export class EcosystemSync {
   }
   private async cycle() {
     this.publish({ status: "Syncing", error: null });
+    const cached = await this.localView();
+    this.publish({ tasks: cached.tasks, links: cached.links });
     const devices = await this.request<DeviceList>("/v1/devices");
     await this.run((engine) => {
       const verified = JSON.parse(
@@ -310,6 +321,7 @@ export class EcosystemSync {
         await this.run((engine) => {
           const index = readIndex(engine);
           index.foreign[zone] = [];
+          if (index.waiting) delete index.waiting[zone];
           saveIndex(engine, index);
         });
         continue;
@@ -425,7 +437,17 @@ export class EcosystemSync {
           throw new Error("More local changes are waiting to sync.");
       }
     }
-    const data = await this.run((engine) => {
+    const data = await this.localView(true);
+    this.publish({
+      tasks: data.tasks,
+      links: data.links,
+      status: data.waiting ? "Waiting for device keys" : "Synced",
+      error: null,
+      syncedAt: new Date().toISOString(),
+    });
+  }
+  private async localView(materialize = false) {
+    const project = (engine: SyncEngine) => {
       const index = readIndex(engine);
       const tasks: PlannerTask[] = [],
         links: TaskLink[] = [];
@@ -458,14 +480,8 @@ export class EcosystemSync {
           (ids) => ids.length > 0,
         ),
       };
-    }, true);
-    this.publish({
-      tasks: data.tasks,
-      links: data.links,
-      status: data.waiting ? "Waiting for device keys" : "Synced",
-      error: null,
-      syncedAt: new Date().toISOString(),
-    });
+    };
+    return materialize ? this.run(project, true) : this.read(project);
   }
   async link(noteId: string, task: PlannerTask): Promise<void> {
     const current = await this.store.get(noteId);
@@ -478,33 +494,56 @@ export class EcosystemSync {
     )
       throw new Error("This task is no longer available.");
     const zone = LINKS_ZONE + this.identity.deviceId;
-    await this.run((engine) => {
-      const index = readIndex(engine);
-      const existing = this.snapshot.links.find(
-        (link) =>
-          link.noteId === noteId &&
-          link.taskId === task.id &&
-          link.zone === zone,
-      );
-      const id = existing?.id ?? crypto.randomUUID();
-      const link = {
-        accountId: this.identity.accountId,
-        noteId,
-        taskId: task.id,
-        taskZone: task.zone,
-        noteTitle: current.title || "Untitled note",
-        active: true,
-      };
-      engine.stage(
-        zone,
-        "orbyn_note_task_link_v1",
-        id,
-        JSON.stringify({
-          link: { value: link, stamp: JSON.parse(engine.tick(Date.now())) },
-        }),
-      );
-      index.foreign[zone] = [...new Set([...(index.foreign[zone] ?? []), id])];
-      saveIndex(engine, index);
+    const saved = await this.run(
+      (engine) => {
+        const index = readIndex(engine);
+        const existing = (index.foreign[zone] ?? [])
+          .flatMap((id) => {
+            const raw = engine.record(zone, id);
+            const link = raw
+              ? parseTaskLink(id, zone, raw, this.identity.accountId)
+              : null;
+            return link ? [link] : [];
+          })
+          .find(
+            (link) =>
+              link.noteId === noteId &&
+              link.taskId === task.id &&
+              link.taskZone === task.zone,
+          );
+        const id = existing?.id ?? crypto.randomUUID();
+        const link = {
+          accountId: this.identity.accountId,
+          noteId,
+          taskId: task.id,
+          taskZone: task.zone,
+          noteTitle: current.title || "Untitled note",
+          active: true,
+        };
+        engine.stage(
+          zone,
+          "orbyn_note_task_link_v1",
+          id,
+          JSON.stringify({
+            link: { value: link, stamp: JSON.parse(engine.tick(Date.now())) },
+          }),
+        );
+        index.foreign[zone] = [
+          ...new Set([...(index.foreign[zone] ?? []), id]),
+        ];
+        saveIndex(engine, index);
+        return { ...link, id, zone };
+      },
+      false,
+      true,
+    );
+    this.publish({
+      links: [
+        ...this.snapshot.links.filter(
+          (link) => link.id !== saved.id || link.zone !== saved.zone,
+        ),
+        saved,
+      ],
     });
     await this.syncNow();
   }

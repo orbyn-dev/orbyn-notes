@@ -12,30 +12,17 @@ import type { NotesLibraryStore } from "../library/contracts";
 import { EcosystemSync } from "./cycle";
 import { Dialog } from "../ui/primitives";
 import { formatWebNoteLink } from "../links/entry";
+import { reconnectHref, plannerTaskHref } from "./appLinks";
 import "./sync.css";
 
-const Context = createContext<EcosystemSync | null>(null);
+type EcosystemController = Pick<
+  EcosystemSync,
+  "getSnapshot" | "subscribe" | "syncNow" | "link"
+>;
+const Context = createContext<EcosystemController | null>(null);
+export const EcosystemContextForTests = Context;
 const noSubscribe = () => () => {};
 const noSnapshot = () => null;
-export function configuredAppUrl(value: unknown): URL | null {
-  if (typeof value !== "string") return null;
-  try {
-    const url = new URL(value);
-    if (
-      url.username ||
-      url.password ||
-      !(
-        url.protocol === "https:" ||
-        (url.protocol === "http:" &&
-          ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname))
-      )
-    )
-      return null;
-    return url;
-  } catch {
-    return null;
-  }
-}
 export function EcosystemProvider({
   children,
   store,
@@ -81,7 +68,7 @@ function useEcosystem() {
 export function useEcosystemEnabled() {
   return useContext(Context) !== null;
 }
-function SyncNotice({
+export function SyncNotice({
   store,
   identity,
 }: {
@@ -105,12 +92,18 @@ function SyncNotice({
     void store.library
       .read()
       .then((value) => {
+        if (!active) return;
         if (
-          !active ||
           value.mode !== "ready" ||
           !value.snapshot.notes.some((note) => note.id === noteId)
-        )
+        ) {
+          if (state?.syncedAt && state.status === "Synced")
+            setLinkError(
+              "This linked note isn’t available on this device. Its link is kept so a later sync can open it.",
+            );
           return;
+        }
+        setLinkError("");
         const link = formatWebNoteLink(
           {
             kind: "note",
@@ -140,7 +133,7 @@ function SyncNotice({
       {state?.error && (
         <>
           <span role="alert">{state.error}</span>
-          <a href="?connect=1">Sign in to sync</a>
+          <a href={reconnectHref(location.href)}>Sign in to sync</a>
         </>
       )}
       {linkError && <span role="alert">{linkError}</span>}
@@ -148,14 +141,19 @@ function SyncNotice({
   );
 }
 /** Notes Designs 2be4f2d: link-picker / planner-note, task-only test slice. */
-export function PlannerLinks({ noteId }: { noteId: string }) {
+export function PlannerLinks({
+  noteId,
+  readOnly = false,
+}: {
+  noteId: string;
+  readOnly?: boolean;
+}) {
   const { controller, state } = useEcosystem();
   const [open, setOpen] = useState(false),
     [query, setQuery] = useState("");
   const [error, setError] = useState(""),
     [busy, setBusy] = useState(false);
   if (!controller || !state) return null;
-  const app = configuredAppUrl(import.meta.env.VITE_PLANNER_URL);
   const links = state.links.filter(
     (link) => link.noteId === noteId && link.active,
   );
@@ -165,16 +163,16 @@ export function PlannerLinks({ noteId }: { noteId: string }) {
         const task = state.tasks.find(
           (task) => task.id === link.taskId && task.zone === link.taskZone,
         );
-        const href = app && new URL("/tasks", app);
-        if (href) {
-          href.searchParams.set("orbynTask", link.taskId);
-          href.searchParams.set("orbynAccount", link.accountId);
-        }
+        const href = plannerTaskHref(
+          import.meta.env.VITE_PLANNER_URL,
+          link.taskId,
+          link.accountId,
+        );
         return (
           <span className="ecosystem-task-chip" key={link.id}>
             {task && href ? (
               <a
-                href={href.href}
+                href={href}
                 target="_blank"
                 rel="noopener noreferrer"
                 title="Open in Planner"
@@ -188,7 +186,9 @@ export function PlannerLinks({ noteId }: { noteId: string }) {
         );
       })}
       <button
+        disabled={readOnly}
         onClick={() => {
+          if (readOnly) return;
           setOpen(true);
           setError("");
         }}
@@ -206,6 +206,7 @@ export function PlannerLinks({ noteId }: { noteId: string }) {
             Search tasks
             <input
               autoFocus
+              disabled={readOnly}
               value={query}
               onChange={(event) => setQuery(event.target.value)}
             />
@@ -220,9 +221,10 @@ export function PlannerLinks({ noteId }: { noteId: string }) {
               )
               .map((task) => (
                 <button
-                  disabled={busy}
+                  disabled={busy || readOnly}
                   key={`${task.zone}:${task.id}`}
                   onClick={() => {
+                    if (readOnly || busy) return;
                     setBusy(true);
                     setError("");
                     void controller

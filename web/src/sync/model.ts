@@ -179,5 +179,6 @@ export type SyncTransaction = <T>(
   run: (engine: SyncEngine) => T,
   materialize?: boolean,
   readOnly?: boolean,
+  requireWritable?: boolean,
 ) => Promise<T>;
 export const syncOwners = new WeakMap<object, SyncTransaction>();

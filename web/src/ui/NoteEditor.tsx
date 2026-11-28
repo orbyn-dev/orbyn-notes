@@ -953,7 +953,7 @@ export function NoteEditor({
             })}
           </time>
         </CompactNoteTags>
-        <PlannerLinks noteId={note.id} />
+        <PlannerLinks noteId={note.id} readOnly={readOnly} />
         <RichEditor
           toolbarTarget={formattingTarget}
           active={active}
