@@ -69,7 +69,8 @@ function AppContent({ quick = false, onUseWithoutAccount }: { quick?: boolean; o
         ? protectOperations(created, Object.keys(created).filter(key => key !== "syncRequest"))
         : created;
       setService(account);
-      void (local ? openLocalSession(() => active) : new URLSearchParams(location.search).get("connect") === "1" ? Promise.resolve(null) : account!.current())
+      const reconnect = import.meta.env.VITE_ECOSYSTEM_SYNC === "1" && new URLSearchParams(location.search).get("connect") === "1";
+      void (local ? openLocalSession(() => active) : reconnect ? Promise.resolve(null) : account!.current())
         .then((s) => {
           if (active) {
             setSession(s);
